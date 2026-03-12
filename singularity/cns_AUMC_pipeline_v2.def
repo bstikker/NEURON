@@ -1,0 +1,90 @@
+Bootstrap: docker
+From: rocker/r-ver:4.4.2
+
+%labels
+    Maintainer Bernard Stikker
+    Version v1.0
+
+%files
+    singularity/sturgeon.yml /sturgeon.yml
+
+%environment
+    export PATH=/opt/conda/envs/sturgeon_env/bin:$PATH
+    export LD_LIBRARY_PATH=/opt/conda/envs/sturgeon_env/lib:$LD_LIBRARY_PATH
+    export R_LIBS="/opt/R/libs"
+
+%post
+    ## --- System utilities and build tools ---
+    apt-get update && apt-get install -y \
+        wget \
+        curl \
+        git \
+        build-essential \
+        libcurl4-openssl-dev \
+        libssl-dev \
+        libxml2-dev \
+        libhdf5-dev \
+        libbz2-dev \
+        liblzma-dev \
+        zlib1g-dev \
+        libncurses-dev \
+        libreadline-dev \
+        libxt-dev \
+        libpng-dev \
+        libjpeg-dev \
+        libtiff5-dev \
+        libgtk2.0-dev \
+        libpango1.0-dev \
+        libcairo2-dev \
+        gfortran \
+        libblas-dev \
+        liblapack-dev \
+        pkg-config \
+        locales \
+        ca-certificates \
+        pandoc \
+        texlive-xetex \
+        texlive-fonts-recommended \
+        texlive-latex-recommended \
+        texlive-latex-extra \
+        && apt-get clean
+
+    # Locale settings
+    locale-gen en_US.UTF-8
+    update-locale LANG=en_US.UTF-8
+    export LANG=en_US.UTF-8
+
+    export CONDA_NO_PLUGINS=true
+
+    ## --- Miniconda + your custom env ---
+    cd /tmp
+    wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+    bash Miniconda3-latest-Linux-x86_64.sh -b -p /opt/conda
+    rm Miniconda3-latest-Linux-x86_64.sh
+
+    # Activate conda for current shell
+    export PATH=/opt/conda/bin:$PATH
+    eval "$(/opt/conda/bin/conda shell.bash hook)"
+
+    # Copy and create the environment
+    mkdir -p /opt/envs
+    cp /sturgeon.yml /opt/envs/
+    conda env create --solver classic -f /opt/envs/sturgeon.yml -n sturgeon_env
+
+    ## --- R package installation ---
+    mkdir -p /opt/R/libs
+    chmod -R 777 /opt/R/libs
+    export R_LIBS="/opt/R/libs"
+
+    Rscript -e "install.packages('BiocManager', repos='https://cloud.r-project.org', lib='/opt/R/libs')"
+    Rscript -e "BiocManager::install(c('QDNAseq', 'DNAcopy', 'ACE', 'Rsamtools', 'BiocGenerics', 'Biobase', 'ggplot2', 'data.table', 'readr', 'dplyr', 'tidyr', 'glue', 'rmarkdown', 'kableExtra', 'optparse'), ask=FALSE, update=TRUE, lib='/opt/R/libs')"
+
+%runscript
+    exec "$@"
+
+%help
+    Includes:
+    - R 4.4.2 with QDNAseq, ACE, rmarkdown
+    - Conda env from sturgeon.yml (modkit, sturgeon)
+    - LaTeX + Pandoc for rendering RMarkdown to PDF
+    - No online downloads required during build

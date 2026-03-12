@@ -1,0 +1,14 @@
+name: report
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - r-base=4.3
+  - rmarkdown        
+  - knitr
+  - readr
+  - dplyr
+  - ggplot2
+  - stringr
+  - pandoc             # required for rendering
+  - texlive-core       # for PDF output via xelatex

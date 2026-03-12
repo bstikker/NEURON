@@ -1,0 +1,25 @@
+container: "singularity/cns_AUMC_pipeline_v2.sif"
+
+threads:
+  sturgeon: 10
+  qdnaseq_ace: 8
+  pseudotime: 10
+
+references:
+  sturgeon_probes: "reference/probes/probelocs_chm13.bed"
+  sturgeon_model: "reference/models/general.zip"
+  qdnaseq_bins: "reference/bins/T2T.500kbp.SR50.rda"
+  genome_fasta: "reference/genome/chm13v2.0.fa.gz"
+  bins_export: "reference/bins_export.bed"
+  chm13_bins_rds: "reference/bins/chm13_v2.0_bins.rds"
+  cnv_gene_bed: "reference/genes/relevant_genes_with_chm13v2_500kb_bin_nrs_fusions_singlebin.bed"
+  color_translation: "scripts/color_translation.rds"
+  mgmt_model: "scripts/mgmt_137sites_mean_model.Rdata"
+  mgmt_bed: "scripts/mgmt_promoter_coordinates_T2T.bed"
+  report_logo: "scripts/logo.png"
+  report_header: "scripts/logo.tex"
+
+samples:
+  TEST_SAMPLE:
+    bam: "input/TEST_SAMPLE/test_subset.bam"
+    summary: "input/test_run/sequencing_summary_test.txt"

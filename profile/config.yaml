@@ -1,0 +1,16 @@
+executor: slurm
+default-resources:
+  - mem_mb=4000
+  - runtime=2h
+  - cpus=4
+  - partition=defq
+  - account=tgac
+jobs: 10
+jobname: "{rulename}.{jobid}"
+latency-wait: 60
+use-conda: false
+keep-going: true
+rerun-incomplete: true
+printshellcmds: true
+use-singularity: true
+singularity-args: "--bind /net:/net"

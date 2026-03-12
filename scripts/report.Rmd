@@ -1,0 +1,109 @@
+---
+title: "Molecular Diagnostics CNS Tumor Report"
+author: "Dr. Bernard Stikker"
+output:
+  pdf_document:
+    latex_engine: xelatex
+params:
+  sample: "SAMPLE_NAME"
+knit_root_dir: '.'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+library(readr)
+library(dplyr)
+library(knitr)
+library(ggplot2)
+library(stringr)
+```
+
+```{r sturgeon_plot}
+sturgeon_plot_path <- file.path("results", params$sample, "merged_probes_methyl_calls_general.pdf")
+if (file.exists(sturgeon_plot_path)) {
+  knitr::include_graphics(normalizePath(sturgeon_plot_path, mustWork = TRUE), rel_path = FALSE)
+} else {
+  cat("Sturgeon classification plot not found.")
+}
+```
+
+# MGMT Promoter Methylation
+```{r MGMT}
+mgmt_path <- file.path("results", params$sample, "MGMT_analysis", "mgmt_prediction.tsv")
+if (file.exists(mgmt_path)) {
+  mgmt <- read_tsv(mgmt_path, show_col_types = FALSE)
+  kable(mgmt, caption = "MGMT Promoter Methylation Score")
+} else {
+  cat("MGMT methylation prediction not found.")
+}
+```
+
+# CNV Profile
+```{r CNV}
+cnv_path <- file.path("results", params$sample, "QDNAseq_ACE", paste0(params$sample, "_segmented.png"))
+if (file.exists(cnv_path)) {
+  knitr::include_graphics(normalizePath(cnv_path, mustWork = TRUE), rel_path = FALSE)
+} else {
+  cat("CNV profile not found.")
+}
+```
+
+# ACE Tumor Purity & Ploidy
+```{r ACE}
+ace_path <- file.path("results", params$sample, "QDNAseq_ACE", "ACE_summary.tsv")
+if (file.exists(ace_path)) {
+  ace <- read_tsv(ace_path, show_col_types = FALSE)
+  kable(ace, caption = "Tumor Purity and Ploidy Estimates from ACE")
+} else {
+  cat("ACE estimate not found.")
+}
+```
+
+# Pseudotime Confidence Plot
+```{r pseudotime_analysis}
+pseudo_path <- file.path("results", params$sample, "pseudotime", "confidence_vs_pseudotime.png")
+if (file.exists(pseudo_path)) {
+  knitr::include_graphics(normalizePath(pseudo_path, mustWork = TRUE), rel_path = FALSE)
+} else {
+  cat("Pseudotime confidence plot not found.")
+}
+```
+
+```{r load-conf-stable, message=FALSE}
+sample_id <- params$sample
+confident_csv <- file.path("results", sample_id, "pseudotime", "confident_time.csv")
+stable_csv    <- file.path("results", sample_id, "pseudotime", "stable_time.csv")
+
+conf_time <- if (file.exists(confident_csv)) readr::read_csv(confident_csv, show_col_types = FALSE) else NULL
+stab_time <- if (file.exists(stable_csv))    readr::read_csv(stable_csv,    show_col_types = FALSE) else NULL
+```
+
+```{r show-conf-stable}
+dplyr::bind_rows(
+  dplyr::mutate(conf_time, metric = "First confident (≥0.8)"),
+  dplyr::mutate(stab_time, metric = "Stable confident (4× ≥0.8)")
+) |>
+  dplyr::select(metric, time_min, covered_cpg, number_probes, label) |>
+  knitr::kable(caption = "Sturgeon time-to-confidence estimates (minutes).")
+```
+
+```{r conf-stable-plot}
+df <- dplyr::bind_rows(
+  dplyr::mutate(conf_time, metric = "First confident"),
+  dplyr::mutate(stab_time, metric = "Stable (4×)")
+)
+if (!is.null(df) && nrow(df) > 0) {
+  ggplot2::ggplot(df, ggplot2::aes(x = metric, y = time_min)) +
+    ggplot2::geom_col() +
+    ggplot2::geom_text(ggplot2::aes(label = round(time_min, 1)), vjust = -0.5) +
+    ggplot2::labs(x = NULL, y = "Minutes", title = "Time to confident classification")
+}
+```
+
+# Report Metadata
+```{r metadata}
+cat("Report generated on:", Sys.Date(), "
+")
+cat("User:", Sys.info()[['user']], "
+")
+```
