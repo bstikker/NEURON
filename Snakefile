@@ -12,10 +12,7 @@ rule all:
         expand("results/{sample}/merged_probes_methyl_calls_general.csv", sample=SAMPLES),
         expand("results/{sample}/QDNAseq_ACE/{sample}_segmented.png", sample=SAMPLES),
         expand("results/{sample}/QDNAseq_ACE/ACE_summary.tsv", sample=SAMPLES),
-        expand("results/{sample}/pseudotime/confidence_vs_pseudotime.png", sample=SAMPLES),
-        expand("results/{sample}/pseudotime/confidence_vs_pseudotime.csv", sample=SAMPLES),
         expand("results/{sample}/MGMT_analysis/mgmt_prediction.tsv", sample=SAMPLES),
-        expand("results/{sample}/pseudotime/cleanup_done.txt", sample=SAMPLES),
         expand("results/{sample}/final_report.pdf", sample=SAMPLES)
 
 rule sturgeon:
@@ -60,27 +57,6 @@ rule qdnaseq_ace:
         Rscript scripts/run_qdnaseq_ace.R {params.sample} {input.bam}
         """
 
-rule pseudotime:
-    input:
-        bam=lambda wildcards: config["samples"][wildcards.sample]["bam"],
-        seq_summary=lambda wildcards: config["samples"][wildcards.sample]["summary"],
-        modkit="results/{sample}/modkit_extracted.txt"
-    output:
-        confidence_csv="results/{sample}/pseudotime/confidence_vs_pseudotime.csv",
-        confidence_plot="results/{sample}/pseudotime/confidence_vs_pseudotime.png"
-    resources:
-        mem_mb=32000,
-        threads=THREADS.get("pseudotime", 10),
-        cpus=THREADS.get("pseudotime", 10)
-    params:
-        sample="{sample}"
-    container:
-        CONTAINER
-    shell:
-        """
-        Rscript scripts/pseudotime_analysis.R {input.bam} {params.sample} {input.seq_summary}
-        """
-
 rule mgmt_predict_promoter:
     input:
         modkit="results/{sample}/modkit_extracted.txt",
@@ -95,63 +71,13 @@ rule mgmt_predict_promoter:
         Rscript scripts/mgmt_analysis.R             --modkit {input.modkit}             --model {input.model}             --bed {input.bed}             --out {output.result}             --verbose
         """
 
-rule cleanup_bins:
-    input:
-        "results/{sample}/pseudotime/confidence_vs_pseudotime.png"
-    output:
-        touch("results/{sample}/pseudotime/cleanup_done.txt")
-    shell:
-        """
-        rm -rf results/{wildcards.sample}/pseudotime/bin_*
-        touch {output}
-        """
-
-rule estimate_confident_time:
-    input:
-        csv="results/{sample}/pseudotime/confidence_vs_pseudotime.csv"
-    output:
-        "results/{sample}/pseudotime/confident_time.csv"
-    params:
-        label="{sample}"
-    resources:
-        mem_mb=2000,
-        cpus=1
-    container:
-        CONTAINER
-    shell:
-        r"""
-        python scripts/estimate_confident_time.py           --in_csv {input.csv}           --out_csv {output}           --label {params.label}
-        """
-
-rule estimate_stable_time:
-    input:
-        csv="results/{sample}/pseudotime/confidence_vs_pseudotime.csv"
-    output:
-        "results/{sample}/pseudotime/stable_time.csv"
-    params:
-        label="{sample}"
-    resources:
-        mem_mb=2000,
-        cpus=1
-    container:
-        CONTAINER
-    shell:
-        r"""
-        python scripts/estimate_stable_time.py           --in_csv {input.csv}           --out_csv {output}           --label {params.label}
-        """
-
 rule report:
     input:
         sturgeon_pdf="results/{sample}/merged_probes_methyl_calls_general.pdf",
         mgmt="results/{sample}/MGMT_analysis/mgmt_prediction.tsv",
         cnv_png="results/{sample}/QDNAseq_ACE/{sample}_segmented.png",
         ace="results/{sample}/QDNAseq_ACE/ACE_summary.tsv",
-        pseudo="results/{sample}/pseudotime/confidence_vs_pseudotime.png",
-        confident="results/{sample}/pseudotime/confident_time.csv",
-        stable="results/{sample}/pseudotime/stable_time.csv",
-        rmd="scripts/report.Rmd",
-        logo=REFERENCES.get("report_logo", "scripts/logo.png"),
-        latex_header=REFERENCES.get("report_header", "scripts/logo.tex")
+        rmd="scripts/report.Rmd"        
     output:
         pdf="results/{sample}/final_report.pdf"
     params:
@@ -161,6 +87,11 @@ rule report:
         CONTAINER
     shell:
         r"""
-        cp {input.logo} {params.outdir}/logo.png
-        Rscript -e "rmarkdown::render(          input = '{input.rmd}',           params = list(sample = '{params.sample}'),           output_dir = normalizePath('{params.outdir}', mustWork = TRUE),           output_file = 'final_report.pdf',           knit_root_dir = normalizePath('.', mustWork = TRUE),           output_options = list(includes = list(in_header = normalizePath('{input.latex_header}', mustWork = TRUE)))        )"
+        Rscript -e "rmarkdown::render(\
+          input = 'scripts/report.Rmd', \
+          params = list(sample = '{wildcards.sample}'), \
+          output_dir = normalizePath('results/{wildcards.sample}', mustWork = TRUE), \
+          output_file = 'final_report.pdf', \
+          knit_root_dir = normalizePath('.', mustWork = TRUE) \
+        )"
         """
