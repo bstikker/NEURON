@@ -17,7 +17,7 @@ library(knitr)
 library(ggplot2)
 library(stringr)
 ```
-
+# Sturgeon V1 classification
 ```{r sturgeon_plot}
 sturgeon_plot_path <- file.path("results", params$sample, "merged_probes_methyl_calls_general.pdf")
 if (file.exists(sturgeon_plot_path)) {
@@ -40,7 +40,7 @@ if (file.exists(mgmt_path)) {
 
 # CNV Profile
 ```{r CNV}
-cnv_path <- file.path("results", params$sample, "QDNAseq_ACE", paste0(params$sample, "_segmented.png"))
+cnv_path <- file.path("results", params$sample, "QDNAseq_ACE", paste0(params$sample, "_CNV.png"))
 if (file.exists(cnv_path)) {
   knitr::include_graphics(normalizePath(cnv_path, mustWork = TRUE), rel_path = FALSE)
 } else {

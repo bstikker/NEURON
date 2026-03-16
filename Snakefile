@@ -10,7 +10,8 @@ REFERENCES = config.get("references", {})
 rule all:
     input:
         expand("results/{sample}/merged_probes_methyl_calls_general.csv", sample=SAMPLES),
-        expand("results/{sample}/QDNAseq_ACE/{sample}_segmented.png", sample=SAMPLES),
+        expand("results/{sample}/QDNAseq_ACE/{sample}_CNV.png", sample=SAMPLES),
+        expand("results/{sample}/QDNAseq_ACE/{sample}_CGHcall_segments.tsv", sample=SAMPLES),
         expand("results/{sample}/QDNAseq_ACE/ACE_summary.tsv", sample=SAMPLES),
         expand("results/{sample}/MGMT_analysis/mgmt_prediction.tsv", sample=SAMPLES),
         expand("results/{sample}/final_report.pdf", sample=SAMPLES)
@@ -39,10 +40,10 @@ rule qdnaseq_ace:
     input:
         bam="results/{sample}/adjusted_merged_sorted.bam"
     output:
-        bed=temp("results/{sample}/QDNAseq_ACE/{sample}_500kbp.bed"),
-        seg=temp("results/{sample}/QDNAseq_ACE/{sample}_500kbp.seg"),
+        bed="results/{sample}/QDNAseq_ACE/{sample}_500kbp.bed",
+        seg="results/{sample}/QDNAseq_ACE/{sample}_500kbp.seg",
         plot="results/{sample}/QDNAseq_ACE/{sample}_segmented.png",
-        rds=temp("results/{sample}/QDNAseq_ACE/{sample}_copyNumbersSegmented.rds"),
+        rds="results/{sample}/QDNAseq_ACE/{sample}_copyNumbersSegmented.rds",
         ace_summary="results/{sample}/QDNAseq_ACE/ACE_summary.tsv",
         ace_plot="results/{sample}/QDNAseq_ACE/{sample}_ACE_matrixplot.png"
     params:
@@ -55,6 +56,30 @@ rule qdnaseq_ace:
     shell:
         """
         Rscript scripts/run_qdnaseq_ace.R {params.sample} {input.bam}
+        """
+
+rule qdnaseq_cghcall_annotate:
+    input:
+        rds="results/{sample}/QDNAseq_ACE/{sample}_copyNumbersSegmented.rds",
+        gene_bed="reference/genes/relevant_genes_with_chm13v2_500kb_bin_nrs_fusions_singlebin.bed"
+    output:
+        cnv="results/{sample}/QDNAseq_ACE/{sample}_CNV.png",
+        segments="results/{sample}/QDNAseq_ACE/{sample}_CGHcall_segments.tsv",
+        qc="results/{sample}/QDNAseq_ACE/{sample}_QDNAseq_QC.tsv"
+    threads: 2
+    resources:
+        mem_mb=8000,
+        runtime=120
+    container:
+        CONTAINER
+    shell:
+        r"""
+        Rscript scripts/qdnaseq_cghcall_annotate.R \
+            {wildcards.sample} \
+            {input.rds} \
+            {input.gene_bed} \
+            results/{wildcards.sample}/QDNAseq_ACE \
+            FALSE
         """
 
 rule mgmt_predict_promoter:
@@ -75,7 +100,7 @@ rule report:
     input:
         sturgeon_pdf="results/{sample}/merged_probes_methyl_calls_general.pdf",
         mgmt="results/{sample}/MGMT_analysis/mgmt_prediction.tsv",
-        cnv_png="results/{sample}/QDNAseq_ACE/{sample}_segmented.png",
+        cnv="results/{sample}/QDNAseq_ACE/{sample}_CNV.png",
         ace="results/{sample}/QDNAseq_ACE/ACE_summary.tsv",
         rmd="scripts/report.Rmd"        
     output:
