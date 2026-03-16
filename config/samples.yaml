@@ -24,3 +24,6 @@ samples:
     bam: "input/TEST_SAMPLE/test_subset.bam"
     summary: "input/test_run/sequencing_summary_test.txt"
     barcode: ""
+  TVU19-13652:
+    bam: "input/TVU19-13652/aligned_barcode01_1-TVU19-13652-barcode01.bam"
+    barcode: ""
