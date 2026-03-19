@@ -7,6 +7,26 @@ CONTAINER = config.get("container", "singularity/cns_AUMC_pipeline_v2.sif")
 THREADS = config.get("threads", {})
 REFERENCES = config.get("references", {})
 
+import os
+
+def estimate_mem_mb(wildcards):
+    bam_path = config["samples"][wildcards.sample]["bam"]
+    if not os.path.exists(bam_path):
+        return 32000
+    size_gb = os.path.getsize(bam_path) / (1024**3)
+
+    # more conservative for large BAMs
+    if size_gb < 15:
+        mem_gb = 32
+    elif size_gb < 30:
+        mem_gb = 64
+    elif size_gb < 45:
+        mem_gb = 96
+    else:
+        mem_gb = 128
+
+    return mem_gb * 1024
+
 rule all:
     input:
         expand("results/{sample}/merged_probes_methyl_calls_general.csv", sample=SAMPLES),
@@ -24,9 +44,10 @@ rule sturgeon:
         sturgeon_csv="results/{sample}/merged_probes_methyl_calls_general.csv",
         adjusted_bam=temp("results/{sample}/adjusted_merged_sorted.bam"),
         sturgeon_pdf="results/{sample}/merged_probes_methyl_calls_general.pdf"
+    threads: THREADS.get("sturgeon", 10)
     resources:
-        mem_mb=20000,
-        threads=THREADS.get("sturgeon", 10)
+        mem_mb=estimate_mem_mb,  # dynamically estimate per sample
+        runtime=360  # keep 6h max
     params:
         sample="{sample}"
     container:
@@ -89,6 +110,8 @@ rule mgmt_predict_promoter:
         bed=REFERENCES.get("mgmt_bed", "scripts/mgmt_promoter_coordinates_T2T.bed")
     output:
         result="results/{sample}/MGMT_analysis/mgmt_prediction.tsv"
+    resources:
+        mem_mb=32000
     container:
         CONTAINER
     shell:

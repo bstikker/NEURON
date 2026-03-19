@@ -20,10 +20,10 @@ references:
   report_header: "scripts/logo.tex"
 
 samples:
-  TEST_SAMPLE:
-    bam: "input/TEST_SAMPLE/test_subset.bam"
-    summary: "input/test_run/sequencing_summary_test.txt"
+  TVU20-4884:
+    bam: "/net/beegfs/users/P092309/Experiments/BS-017_AvM-001/202506-031/data/ONT00064/PBK00984-03bba94a/bam/aligned_barcode01_60-TVU20-4884-BC1.bam" 
     barcode: ""
-  TVU19-13652:
-    bam: "input/TVU19-13652/aligned_barcode01_1-TVU19-13652-barcode01.bam"
+  TVU19-2134:
+    bam: "/net/beegfs/users/P092309/Experiments/BS-017_AvM-001/202506-031/data/ONT00064/PBK00984-03bba94a/bam/aligned_barcode02_Glioblastoma-IDHwt-BC2.bam"
     barcode: ""
+
