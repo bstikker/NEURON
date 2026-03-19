@@ -11,6 +11,7 @@ import os
 
 TIMECONFIG = config.get("timecourse", {})
 TIMECourse_BINS = TIMECONFIG.get("bins", [15, 30, 45, 60, 90, 120, 180, 240, 360, 480])
+TIMECourse_CLEANUP = TIMECONFIG.get("cleanup_bins", False)
 
 def has_timecourse(sample):
     s = config["samples"][sample]
@@ -176,7 +177,8 @@ rule sturgeon_timecourse:
     params:
         barcode_label=lambda wc: config["samples"][wc.sample]["barcode_label"],
         bins=lambda wc: " ".join(map(str, TIMECourse_BINS)),
-        project_root=lambda wc: workflow.basedir
+        project_root=lambda wc: workflow.basedir,
+        cleanup_bins=lambda wc: "true" if TIMECourse_CLEANUP else "false"
     threads: THREADS.get("sturgeon", 10)
     resources:
         mem_mb=estimate_mem_mb,
@@ -191,7 +193,7 @@ rule sturgeon_timecourse:
         mkdir -p results/{wildcards.sample}
         mkdir -p tmp
 
-        python3 scripts/generate_reads_lists.py \
+        python3 {input.script_py} \
             --summary {input.summary} \
             --sample {wildcards.sample} \
             --barcode-label "{params.barcode_label}" \
@@ -201,7 +203,7 @@ rule sturgeon_timecourse:
         for BIN in {params.bins}; do
             READ_LIST="read_lists/{wildcards.sample}/{wildcards.sample}_read_ids_${{BIN}}min.txt"
             if [[ -s "${{READ_LIST}}" ]]; then
-                bash scripts/subset_bam_and_run_sturgeon.sh \
+                bash {input.script_sh} \
                     "{input.bam}" \
                     "${{READ_LIST}}" \
                     "{wildcards.sample}" \
@@ -212,9 +214,18 @@ rule sturgeon_timecourse:
             fi
         done
 
-        Rscript scripts/aggregate_sturgeon_timecourse_line_top10.R \
+        Rscript {input.script_r} \
             results/{wildcards.sample} \
             results/{wildcards.sample}/{wildcards.sample}_timecourse_report.pdf \
             results/{wildcards.sample}/{wildcards.sample}_timecourse_summary.tsv \
             read_lists/{wildcards.sample}/{wildcards.sample}_read_counts.tsv
+
+        if [[ "{params.cleanup_bins}" == "true" ]]; then
+            echo "[INFO] Cleaning up per-bin timecourse folders for {wildcards.sample}"
+            find results/{wildcards.sample} \
+                -maxdepth 1 \
+                -type d \
+                -name "{wildcards.sample}_*min" \
+                -exec rm -rf {{}} +
+        fi
         """
