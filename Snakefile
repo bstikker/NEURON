@@ -9,6 +9,13 @@ REFERENCES = config.get("references", {})
 
 import os
 
+TIMECONFIG = config.get("timecourse", {})
+TIMECourse_BINS = TIMECONFIG.get("bins", [15, 30, 45, 60, 90, 120, 180, 240, 360, 480])
+
+def has_timecourse(sample):
+    s = config["samples"][sample]
+    return all(k in s for k in ["bam", "barcode_label", "sequencing_summary"])
+
 def estimate_mem_mb(wildcards):
     bam_path = config["samples"][wildcards.sample]["bam"]
     if not os.path.exists(bam_path):
@@ -142,4 +149,72 @@ rule report:
           output_file = 'final_report.pdf', \
           knit_root_dir = normalizePath('.', mustWork = TRUE) \
         )"
+        """
+
+rule all_timecourse:
+    input:
+        expand("results/{sample}/{sample}_timecourse_report.pdf",
+               sample=[s for s in SAMPLES if has_timecourse(s)]),
+        expand("results/{sample}/{sample}_timecourse_summary.tsv",
+               sample=[s for s in SAMPLES if has_timecourse(s)]),
+        expand("read_lists/{sample}/{sample}_read_counts.tsv",
+               sample=[s for s in SAMPLES if has_timecourse(s)])
+
+rule sturgeon_timecourse:
+    input:
+        bam=lambda wc: config["samples"][wc.sample]["bam"],
+        summary=lambda wc: config["samples"][wc.sample]["sequencing_summary"],
+        script_py="scripts/generate_reads_lists.py",
+        script_sh="scripts/subset_bam_and_run_sturgeon.sh",
+        script_r="scripts/aggregate_sturgeon_timecourse_line_top10.R",
+        probes="reference/probes/probelocs_chm13.bed",
+        model="reference/models/general.zip"
+    output:
+        pdf="results/{sample}/{sample}_timecourse_report.pdf",
+        tsv="results/{sample}/{sample}_timecourse_summary.tsv",
+        read_counts="read_lists/{sample}/{sample}_read_counts.tsv"
+    params:
+        barcode_label=lambda wc: config["samples"][wc.sample]["barcode_label"],
+        bins=lambda wc: " ".join(map(str, TIMECourse_BINS)),
+        project_root=lambda wc: workflow.basedir
+    threads: THREADS.get("sturgeon", 10)
+    resources:
+        mem_mb=estimate_mem_mb,
+        runtime=720
+    container:
+        CONTAINER
+    shell:
+        r"""
+        set -euo pipefail
+
+        mkdir -p read_lists/{wildcards.sample}
+        mkdir -p results/{wildcards.sample}
+        mkdir -p tmp
+
+        python3 scripts/generate_reads_lists.py \
+            --summary {input.summary} \
+            --sample {wildcards.sample} \
+            --barcode-label "{params.barcode_label}" \
+            --output read_lists/{wildcards.sample} \
+            --bins {params.bins}
+
+        for BIN in {params.bins}; do
+            READ_LIST="read_lists/{wildcards.sample}/{wildcards.sample}_read_ids_${{BIN}}min.txt"
+            if [[ -s "${{READ_LIST}}" ]]; then
+                bash scripts/subset_bam_and_run_sturgeon.sh \
+                    "{input.bam}" \
+                    "${{READ_LIST}}" \
+                    "{wildcards.sample}" \
+                    "${{BIN}}" \
+                    "{params.project_root}"
+            else
+                echo "[WARN] Skipping empty or missing ${{READ_LIST}}"
+            fi
+        done
+
+        Rscript scripts/aggregate_sturgeon_timecourse_line_top10.R \
+            results/{wildcards.sample} \
+            results/{wildcards.sample}/{wildcards.sample}_timecourse_report.pdf \
+            results/{wildcards.sample}/{wildcards.sample}_timecourse_summary.tsv \
+            read_lists/{wildcards.sample}/{wildcards.sample}_read_counts.tsv
         """

@@ -19,11 +19,11 @@ references:
   report_logo: "scripts/logo.png"
   report_header: "scripts/logo.tex"
 
-samples:
-  TVU20-4884:
-    bam: "/net/beegfs/users/P092309/Experiments/BS-017_AvM-001/202506-031/data/ONT00064/PBK00984-03bba94a/bam/aligned_barcode01_60-TVU20-4884-BC1.bam" 
-    barcode: ""
-  TVU19-2134:
-    bam: "/net/beegfs/users/P092309/Experiments/BS-017_AvM-001/202506-031/data/ONT00064/PBK00984-03bba94a/bam/aligned_barcode02_Glioblastoma-IDHwt-BC2.bam"
-    barcode: ""
+timecourse:
+  bins: [15, 30, 45, 60, 90, 120, 180, 240, 360, 480]
 
+samples:
+  TVU19-13652:
+    bam: "input/TVU19-13652/aligned_barcode01_1-TVU19-13652-barcode01.bam"
+    sequencing_summary: "input/TVU19-13652/sequencing_summary.txt"
+    barcode_label: "1-TVU19-13652-barcode01"
