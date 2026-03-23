@@ -4,9 +4,12 @@ options(stringsAsFactors = FALSE)
 suppressPackageStartupMessages({
   library(ggplot2)
   library(dplyr)
+  library(tidyr)
   library(grid)
+  library(png)
 })
 
+# ------------------------ Args ------------------------
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 3) {
   stop("Usage: Rscript aggregate_sturgeon_timecourse_line_top10.R <sample_dir> <output_pdf> <summary_tsv> [read_counts_tsv]")
@@ -16,26 +19,7 @@ sample_dir      <- normalizePath(args[1], mustWork = TRUE)
 output_pdf      <- args[2]
 summary_tsv     <- args[3]
 read_counts_tsv <- if (length(args) >= 4) args[4] else NA_character_
-
-cat("Sample directory:", sample_dir, "\n")
-
-extract_minutes <- function(x) {
-  x <- as.character(x)
-  has_match <- grepl("_[0-9]+min", x)
-  out <- sub(".*_([0-9]+)min.*", "\\1", x)
-  out[!has_match] <- NA_character_
-  as.numeric(out)
-}
-
-safe_read_csv <- function(f) {
-  tryCatch(
-    read.csv(f, stringsAsFactors = FALSE, check.names = FALSE),
-    error = function(e) {
-      warning(sprintf("Could not read %s: %s", f, e$message))
-      NULL
-    }
-  )
-}
+sample_id       <- basename(sample_dir)
 
 safe_read_tsv <- function(f) {
   tryCatch(
@@ -47,106 +31,126 @@ safe_read_tsv <- function(f) {
   )
 }
 
-shorten_class <- function(x, max_chars = 45) {
-  ifelse(nchar(x) > max_chars, paste0(substr(x, 1, max_chars - 3), "..."), x)
+infer_time_from_path <- function(path, sample_id) {
+  m <- regexpr(paste0(sample_id, "_([0-9]+)min"), path, perl = TRUE)
+  if (m[1] == -1) return(NA_real_)
+  hit <- regmatches(path, m)[1]
+  as.numeric(sub(paste0(sample_id, "_([0-9]+)min"), "\\1", hit, perl = TRUE))
 }
 
-all_dirs <- list.dirs(sample_dir, recursive = FALSE, full.names = TRUE)
+# ------------------------ Load and reshape Sturgeon CSVs ------------------------
+csv_files <- list.files(
+  sample_dir,
+  pattern = "merged_probes_methyl_calls_general.csv$",
+  recursive = TRUE,
+  full.names = TRUE
+)
 
-sturgeon_dirs <- all_dirs[
-  grepl(paste0("^", basename(sample_dir), "_[0-9]+min$"), basename(all_dirs))
-]
-
-if (length(sturgeon_dirs) == 0) {
-  stop("No Sturgeon time-bin folders found under sample directory.")
+if (length(csv_files) == 0) {
+  stop("No Sturgeon CSVs found in sample_dir")
 }
 
-sturgeon_csvs <- unlist(lapply(sturgeon_dirs, function(d) {
-  list.files(
-    d,
-    pattern = "^merged_probes_methyl_calls_general\\.csv$",
-    full.names = TRUE,
-    recursive = TRUE
+parse_sturgeon_csv <- function(f, sample_id) {
+  df <- tryCatch(
+    read.csv(f, stringsAsFactors = FALSE, check.names = FALSE),
+    error = function(e) {
+      warning(sprintf("Could not read %s: %s", f, e$message))
+      NULL
+    }
   )
-}))
+  if (is.null(df) || nrow(df) == 0) return(NULL)
 
-if (length(sturgeon_csvs) == 0) {
-  stop("No merged_probes_methyl_calls_general.csv files found inside Sturgeon time-bin folders.")
-}
-
-summary_list <- list()
-long_list <- list()
-
-for (f in sturgeon_csvs) {
-  df <- safe_read_csv(f)
-  if (is.null(df) || nrow(df) == 0) next
-
-  folder_name <- basename(dirname(f))
-  if (!grepl("_[0-9]+min$", folder_name)) {
-    path_parts <- strsplit(normalizePath(f), .Platform$file.sep)[[1]]
-    hit <- grep("_[0-9]+min$", path_parts)
-    if (length(hit) > 0) folder_name <- path_parts[max(hit)]
+  # Expected current Sturgeon format:
+  # one row, first col = number_probes, remaining cols = class scores
+  if (!("number_probes" %in% colnames(df))) {
+    warning(sprintf("Skipping %s because 'number_probes' column is missing", f))
+    return(NULL)
   }
 
-  time_min <- extract_minutes(folder_name)
-  if (is.na(time_min)) next
-  if (!("number_probes" %in% colnames(df))) next
+  time_min <- infer_time_from_path(f, sample_id)
+  if (is.na(time_min)) {
+    # skip the root-level non-timecourse CSV if present
+    warning(sprintf("Skipping %s because timepoint could not be inferred from path", f))
+    return(NULL)
+  }
 
+  cpg_used <- suppressWarnings(as.numeric(df$number_probes[1]))
   class_cols <- setdiff(colnames(df), "number_probes")
-  if (length(class_cols) == 0) next
+  if (length(class_cols) == 0) {
+    warning(sprintf("Skipping %s because no class score columns were found", f))
+    return(NULL)
+  }
 
-  row_max <- apply(df[, class_cols, drop = FALSE], 1, max, na.rm = TRUE)
-  best_row_idx <- which.max(row_max)
-  best_row <- df[best_row_idx, , drop = FALSE]
+  scores <- suppressWarnings(as.numeric(df[1, class_cols]))
+  names(scores) <- class_cols
 
-  class_scores <- as.numeric(best_row[, class_cols, drop = TRUE])
-  names(class_scores) <- class_cols
-
-  best_class <- names(class_scores)[which.max(class_scores)]
-  best_score <- max(class_scores, na.rm = TRUE)
-  n_probes <- as.numeric(best_row$number_probes)
-
-  summary_list[[length(summary_list) + 1]] <- data.frame(
+  long_df <- data.frame(
     time_min = time_min,
-    confidence = best_score,
-    predicted_class = best_class,
-    cpg_used = n_probes,
-    source_csv = f,
+    predicted_class = class_cols,
+    confidence = scores,
+    cpg_used = cpg_used,
+    source_csv = basename(f),
     stringsAsFactors = FALSE
   )
 
-  long_list[[length(long_list) + 1]] <- data.frame(
-    time_min = time_min,
-    tumor_class = names(class_scores),
-    score = as.numeric(class_scores),
-    cpg_used = n_probes,
-    stringsAsFactors = FALSE
-  )
+  long_df
 }
 
-if (length(summary_list) == 0) {
-  stop("No usable Sturgeon CSVs could be parsed.")
-}
+long_list <- lapply(csv_files, parse_sturgeon_csv, sample_id = sample_id)
+long_list <- Filter(Negate(is.null), long_list)
 
-summary_table <- bind_rows(summary_list) %>%
-  distinct(time_min, .keep_all = TRUE) %>%
-  arrange(time_min)
+if (length(long_list) == 0) {
+  stop("No readable time-resolved Sturgeon CSVs found in sample_dir")
+}
 
 plot_df <- bind_rows(long_list) %>%
-  arrange(time_min)
+  mutate(
+    time_min = as.numeric(time_min),
+    confidence = as.numeric(confidence),
+    predicted_class = as.character(predicted_class),
+    cpg_used = as.numeric(cpg_used)
+  ) %>%
+  filter(!is.na(time_min), !is.na(confidence)) %>%
+  arrange(time_min, desc(confidence))
 
-if (!is.na(read_counts_tsv) && file.exists(read_counts_tsv)) {
-  reads_df <- safe_read_tsv(read_counts_tsv)
-  if (!is.null(reads_df) && all(c("time_min", "estimated_reads") %in% colnames(reads_df))) {
-    summary_table <- summary_table %>%
-      left_join(reads_df %>% select(time_min, estimated_reads), by = "time_min")
-  } else {
-    summary_table$estimated_reads <- NA_integer_
-  }
-} else {
-  summary_table$estimated_reads <- NA_integer_
+if (nrow(plot_df) == 0) {
+  stop("No valid Sturgeon rows remained after parsing")
 }
 
+# Per-timepoint summary: top class and top confidence
+summary_table <- plot_df %>%
+  group_by(time_min) %>%
+  slice_max(order_by = confidence, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  select(time_min, confidence, predicted_class, cpg_used, source_csv)
+
+# ------------------------ Merge read counts ------------------------
+reads_df <- NULL
+if (!is.na(read_counts_tsv) && file.exists(read_counts_tsv)) {
+  reads_df <- safe_read_tsv(read_counts_tsv)
+}
+
+if (!is.null(reads_df) && all(c("time_min", "estimated_reads") %in% colnames(reads_df))) {
+  reads_df <- reads_df %>%
+    mutate(
+      time_min = as.numeric(time_min),
+      estimated_reads = as.numeric(estimated_reads)
+    ) %>%
+    select(time_min, estimated_reads) %>%
+    distinct() %>%
+    arrange(time_min)
+
+  summary_table <- summary_table %>%
+    left_join(reads_df, by = "time_min")
+} else {
+  summary_table$estimated_reads <- NA_real_
+  reads_df <- data.frame(
+    time_min = sort(unique(summary_table$time_min)),
+    estimated_reads = NA_real_
+  )
+}
+
+# ------------------------ Write summary TSV ------------------------
 write.table(
   summary_table[, c("time_min", "estimated_reads", "confidence", "predicted_class", "cpg_used", "source_csv")],
   file = summary_tsv,
@@ -155,126 +159,136 @@ write.table(
   row.names = FALSE
 )
 
-top_classes <- plot_df %>%
-  group_by(tumor_class) %>%
-  summarise(max_score = max(score, na.rm = TRUE), .groups = "drop") %>%
-  arrange(desc(max_score)) %>%
+# ------------------------ Locate CNV PNGs ------------------------
+time_bins <- sort(unique(summary_table$time_min))
+
+cnv_df <- data.frame(
+  time_min = time_bins,
+  cnv_png = sapply(time_bins, function(t) {
+    file.path(
+      sample_dir,
+      paste0(sample_id, "_", t, "min"),
+      "QDNAseq_ACE",
+      paste0(sample_id, "_", t, "min_CNV.png")
+    )
+  }),
+  stringsAsFactors = FALSE
+) %>%
+  mutate(exists = file.exists(cnv_png))
+
+# ------------------------ Plot top 10 tumor classes ------------------------
+top10_classes <- plot_df %>%
+  group_by(predicted_class) %>%
+  summarise(mean_conf = mean(confidence, na.rm = TRUE), .groups = "drop") %>%
+  arrange(desc(mean_conf)) %>%
   slice_head(n = 10) %>%
-  pull(tumor_class)
+  pull(predicted_class)
 
-plot_top <- plot_df %>%
-  filter(tumor_class %in% top_classes) %>%
-  mutate(tumor_class_short = shorten_class(tumor_class))
-
-cpg_df <- summary_table %>%
-  distinct(time_min, cpg_used, estimated_reads) %>%
+plot_df_top10 <- plot_df %>%
+  filter(predicted_class %in% top10_classes) %>%
+  left_join(reads_df, by = "time_min") %>%
   arrange(time_min)
 
-p_timecourse <- ggplot(
-  plot_top,
-  aes(x = time_min, y = score, color = tumor_class_short, group = tumor_class_short)
-) +
-  geom_hline(yintercept = 0.80, linetype = "dotted", linewidth = 0.6, color = "#E6AC00") +
-  geom_hline(yintercept = 0.95, linetype = "dotted", linewidth = 0.6, color = "#D73027") +
-  geom_line(linewidth = 0.8) +
-  geom_point(size = 1.6) +
-  geom_text(
-    data = cpg_df,
-    aes(x = time_min, y = -0.04, label = cpg_used),
-    inherit.aes = FALSE,
-    angle = 90,
-    vjust = 0.5,
-    size = 2.5,
-    color = "black"
-  ) +
-  annotate("text", x = min(cpg_df$time_min), y = 0.805, label = "0.80", hjust = -0.1, vjust = -0.4, size = 3, color = "#E6AC00") +
-  annotate("text", x = min(cpg_df$time_min), y = 0.955, label = "0.95", hjust = -0.1, vjust = -0.4, size = 3, color = "#D73027") +
-  scale_y_continuous(
-    name = "Sturgeon class score",
-    limits = c(-0.08, 1.02),
-    expand = c(0.01, 0.01)
-  ) +
-  labs(
-    x = "Time (minutes)",
-    title = paste0(basename(sample_dir), " Sturgeon timecourse"),
-    subtitle = "Top 10 class trajectories; numbers below x-axis = CpGs/probes used",
-    color = "Tumor class"
-  ) +
-  theme_minimal(base_size = 11) +
-  theme(
-    plot.title = element_text(face = "bold"),
-    legend.position = "right"
-  )
+has_reads <- any(!is.na(plot_df_top10$estimated_reads)) &&
+             max(plot_df_top10$estimated_reads, na.rm = TRUE) > 0
 
-cnv_dirs <- all_dirs[grepl("^QDNAseq_ACE_[0-9]+min$", basename(all_dirs))]
+if (has_reads) {
+  max_reads <- max(plot_df_top10$estimated_reads, na.rm = TRUE)
 
-cnv_minutes <- extract_minutes(basename(cnv_dirs))
-cnv_dirs_hourly <- cnv_dirs[!is.na(cnv_minutes) & cnv_minutes %% 60 == 0]
+  read_curve_df <- plot_df_top10 %>%
+    distinct(time_min, estimated_reads) %>%
+    arrange(time_min) %>%
+    mutate(reads_scaled = estimated_reads / max_reads)
 
-if (length(cnv_dirs_hourly) == 0 && length(cnv_dirs) > 0) {
-  cnv_dirs_hourly <- cnv_dirs
-}
-
-find_segmented_cnv_png <- function(d) {
-  hits <- list.files(
-    d,
-    pattern = "_segmented\\.png$",
-    full.names = TRUE,
-    recursive = TRUE,
-    ignore.case = TRUE
-  )
-  if (length(hits) > 0) return(hits[1])
-  NA_character_
-}
-
-if (length(cnv_dirs_hourly) == 0) {
-  cnv_png_files <- character(0)
-  cnv_times <- numeric(0)
+  p <- ggplot(plot_df_top10, aes(x = time_min)) +
+    geom_line(aes(y = confidence, color = predicted_class), linewidth = 1) +
+    geom_point(aes(y = confidence, color = predicted_class), size = 1.2) +
+    geom_line(
+      data = read_curve_df,
+      aes(x = time_min, y = reads_scaled, group = 1),
+      inherit.aes = FALSE,
+      linewidth = 0.9,
+      linetype = "longdash",
+      color = "black"
+    ) +
+    geom_point(
+      data = read_curve_df,
+      aes(x = time_min, y = reads_scaled),
+      inherit.aes = FALSE,
+      size = 1.2,
+      color = "black"
+    ) +
+    geom_hline(yintercept = 0.80, linetype = "dotted", color = "goldenrod2") +
+    geom_hline(yintercept = 0.95, linetype = "dotted", color = "red") +
+    scale_y_continuous(
+      name = "Sturgeon confidence",
+      limits = c(0, 1),
+      sec.axis = sec_axis(~ . * max_reads, name = "Estimated cumulative reads")
+    ) +
+    theme_minimal(base_size = 11) +
+    labs(
+      title = paste0(sample_id, ": Sturgeon confidence over time"),
+      x = "Time (min)",
+      color = "Tumor class"
+    ) +
+    scale_color_brewer(palette = "Set1") +
+    theme(
+      plot.title = element_text(face = "bold"),
+      legend.position = "right"
+    )
 } else {
-  cnv_png_files <- unname(sapply(cnv_dirs_hourly, find_segmented_cnv_png, USE.NAMES = TRUE))
-  cnv_png_files <- as.character(cnv_png_files)
-  cnv_png_files <- cnv_png_files[!is.na(cnv_png_files) & nzchar(cnv_png_files)]
-
-  if (length(cnv_png_files) == 0) {
-    cnv_times <- numeric(0)
-  } else {
-    cnv_times <- extract_minutes(basename(cnv_png_files))
-    keep <- !is.na(cnv_times)
-    cnv_png_files <- cnv_png_files[keep]
-    cnv_times <- cnv_times[keep]
-
-    ord <- order(cnv_times)
-    cnv_png_files <- cnv_png_files[ord]
-    cnv_times <- cnv_times[ord]
-  }
+  p <- ggplot(plot_df_top10, aes(x = time_min, y = confidence, color = predicted_class)) +
+    geom_line(linewidth = 1) +
+    geom_point(size = 1.2) +
+    geom_hline(yintercept = 0.80, linetype = "dotted", color = "goldenrod2") +
+    geom_hline(yintercept = 0.95, linetype = "dotted", color = "red") +
+    theme_minimal(base_size = 11) +
+    labs(
+      title = paste0(sample_id, ": Sturgeon confidence over time"),
+      x = "Time (min)",
+      y = "Sturgeon confidence",
+      color = "Tumor class"
+    ) +
+    scale_color_brewer(palette = "Set1") +
+    theme(
+      plot.title = element_text(face = "bold"),
+      legend.position = "right"
+    )
 }
 
-pdf(output_pdf, width = 11, height = 8.5)
-print(p_timecourse)
+# ------------------------ Export PDF with CNV pages ------------------------
+pdf(output_pdf, width = 10, height = 7)
 
-if (length(cnv_png_files) > 0) {
-  if (requireNamespace("png", quietly = TRUE)) {
-    for (i in seq_along(cnv_png_files)) {
-      pf <- cnv_png_files[i]
-      img <- tryCatch(
-        png::readPNG(pf),
-        error = function(e) NULL
+print(p)
+
+cnv_df_existing <- cnv_df %>%
+  filter(exists) %>%
+  arrange(time_min)
+
+if (nrow(cnv_df_existing) > 0) {
+  for (i in seq_len(nrow(cnv_df_existing))) {
+    f <- cnv_df_existing$cnv_png[i]
+    t <- cnv_df_existing$time_min[i]
+
+    img <- tryCatch(readPNG(f), error = function(e) NULL)
+
+    if (!is.null(img)) {
+      grid.newpage()
+      grid.text(
+        paste0(sample_id, " - CNV profile at ", t, " min"),
+        y = unit(0.97, "npc"),
+        gp = gpar(fontsize = 14, fontface = "bold")
       )
-
-      if (!is.null(img)) {
-        grid.newpage()
-        grid.draw(rasterGrob(img, interpolate = FALSE))
-        grid.text(
-          paste0("CNV profile — ", cnv_times[i], " min"),
-          x = unit(0.02, "npc"),
-          y = unit(0.98, "npc"),
-          just = c("left", "top"),
-          gp = gpar(fontsize = 10, fontface = "bold")
-        )
-      }
+      grid.raster(
+        img,
+        x = 0.5, y = 0.47,
+        width = unit(0.95, "npc"),
+        height = unit(0.88, "npc"),
+        interpolate = FALSE
+      )
     }
   }
 }
 
 dev.off()
-cat("\nTimecourse report saved to ", output_pdf, "\n", sep = "")
+cat("\nReport written to", output_pdf, "\n")

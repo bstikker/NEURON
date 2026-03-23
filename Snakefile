@@ -11,7 +11,9 @@ import os
 
 TIMECONFIG = config.get("timecourse", {})
 TIMECourse_BINS = TIMECONFIG.get("bins", [15, 30, 45, 60, 90, 120, 180, 240, 360, 480])
+TIMECourse_CNV_BINS = TIMECONFIG.get("cnv_bins", TIMECourse_BINS)
 TIMECourse_CLEANUP = TIMECONFIG.get("cleanup_bins", False)
+TIMECourse_CLEANUP_READS = TIMECONFIG.get("cleanup_read_lists", False)
 
 def has_timecourse(sample):
     s = config["samples"][sample]
@@ -159,7 +161,70 @@ rule all_timecourse:
         expand("results/{sample}/{sample}_timecourse_summary.tsv",
                sample=[s for s in SAMPLES if has_timecourse(s)]),
         expand("read_lists/{sample}/{sample}_read_counts.tsv",
-               sample=[s for s in SAMPLES if has_timecourse(s)])
+               sample=[s for s in SAMPLES if has_timecourse(s)]),
+
+rule subset_bam_for_cnv_timepoint:
+    input:
+        bam=lambda wc: config["samples"][wc.sample]["bam"],
+        read_list="read_lists/{sample}/{sample}_read_ids_{timebin}min.txt"
+    output:
+        bam=temp("results/{sample}/{sample}_{timebin}min/subset_for_cnv.bam"),
+        bai=temp("results/{sample}/{sample}_{timebin}min/subset_for_cnv.bam.bai")
+    threads: 4
+    resources:
+        mem_mb=8000,
+        runtime=240
+    container:
+        CONTAINER
+    shell:
+        r"""
+        mkdir -p results/{wildcards.sample}/{wildcards.sample}_{wildcards.timebin}min
+        samtools view -@ {threads} -b -N {input.read_list} -o {output.bam} {input.bam}
+        samtools index -@ {threads} {output.bam}
+        """
+
+rule qdnaseq_ace_timecourse:
+    input:
+        bam="results/{sample}/{sample}_{timebin}min/subset_for_cnv.bam",
+        bai="results/{sample}/{sample}_{timebin}min/subset_for_cnv.bam.bai",
+        ace_script="scripts/run_qdnaseq_ace.R",
+        cgh_script="scripts/qdnaseq_cghcall_annotate.R",
+        gene_bed="reference/genes/relevant_genes_with_chm13v2_500kb_bin_nrs_fusions_singlebin.bed"
+    output:
+        bed="results/{sample}/{sample}_{timebin}min/QDNAseq_ACE/{sample}_{timebin}min_500kbp.bed",
+        seg="results/{sample}/{sample}_{timebin}min/QDNAseq_ACE/{sample}_{timebin}min_500kbp.seg",
+        cnv_png="results/{sample}/{sample}_{timebin}min/QDNAseq_ACE/{sample}_{timebin}min_CNV.png",
+        seg_png="results/{sample}/{sample}_{timebin}min/QDNAseq_ACE/{sample}_{timebin}min_segmented.png",
+        rds="results/{sample}/{sample}_{timebin}min/QDNAseq_ACE/{sample}_{timebin}min_copyNumbersSegmented.rds",
+        ace_summary="results/{sample}/{sample}_{timebin}min/QDNAseq_ACE/ACE_summary.tsv",
+        ace_matrix="results/{sample}/{sample}_{timebin}min/QDNAseq_ACE/{sample}_{timebin}min_ACE_matrixplot.png",
+        cgh_segments="results/{sample}/{sample}_{timebin}min/QDNAseq_ACE/{sample}_{timebin}min_CGHcall_segments.tsv",
+        qc="results/{sample}/{sample}_{timebin}min/QDNAseq_ACE/{sample}_{timebin}min_QDNAseq_QC.tsv"
+    threads: THREADS.get("qdnaseq_ace", 8)
+    resources:
+        mem_mb=10000,
+        runtime=720
+    container:
+        CONTAINER
+    shell:
+        r"""
+        set -euo pipefail
+
+        OUTDIR="results/{wildcards.sample}/{wildcards.sample}_{wildcards.timebin}min/QDNAseq_ACE"
+        mkdir -p "$OUTDIR"
+
+        Rscript {input.ace_script} \
+            {wildcards.sample}_{wildcards.timebin}min \
+            {input.bam} \
+            "$OUTDIR"
+
+        Rscript {input.cgh_script} \
+            {wildcards.sample}_{wildcards.timebin}min \
+            {output.rds} \
+            {input.gene_bed} \
+            "$OUTDIR" \
+            FALSE
+        """
 
 rule sturgeon_timecourse:
     input:
@@ -169,7 +234,12 @@ rule sturgeon_timecourse:
         script_sh="scripts/subset_bam_and_run_sturgeon.sh",
         script_r="scripts/aggregate_sturgeon_timecourse_line_top10.R",
         probes="reference/probes/probelocs_chm13.bed",
-        model="reference/models/general.zip"
+        model="reference/models/general.zip",
+        cnv_pngs=expand(
+            "results/{sample}/{sample}_{timebin}min/QDNAseq_ACE/{sample}_{timebin}min_CNV.png",
+            sample=lambda wc: wc.sample,
+            timebin=TIMECourse_CNV_BINS
+        )
     output:
         pdf="results/{sample}/{sample}_timecourse_report.pdf",
         tsv="results/{sample}/{sample}_timecourse_summary.tsv",
@@ -187,11 +257,7 @@ rule sturgeon_timecourse:
         CONTAINER
     shell:
         r"""
-        set -euo pipefail
-
-        mkdir -p read_lists/{wildcards.sample}
-        mkdir -p results/{wildcards.sample}
-        mkdir -p tmp
+        mkdir -p read_lists/{wildcards.sample} results/{wildcards.sample} tmp
 
         python3 {input.script_py} \
             --summary {input.summary} \
@@ -209,23 +275,16 @@ rule sturgeon_timecourse:
                     "{wildcards.sample}" \
                     "${{BIN}}" \
                     "{params.project_root}"
-            else
-                echo "[WARN] Skipping empty or missing ${{READ_LIST}}"
             fi
         done
 
         Rscript {input.script_r} \
             results/{wildcards.sample} \
-            results/{wildcards.sample}/{wildcards.sample}_timecourse_report.pdf \
-            results/{wildcards.sample}/{wildcards.sample}_timecourse_summary.tsv \
-            read_lists/{wildcards.sample}/{wildcards.sample}_read_counts.tsv
+            {output.pdf} \
+            {output.tsv} \
+            {output.read_counts}
 
         if [[ "{params.cleanup_bins}" == "true" ]]; then
-            echo "[INFO] Cleaning up per-bin timecourse folders for {wildcards.sample}"
-            find results/{wildcards.sample} \
-                -maxdepth 1 \
-                -type d \
-                -name "{wildcards.sample}_*min" \
-                -exec rm -rf {{}} +
+            find results/{wildcards.sample} -maxdepth 1 -type d -name "{wildcards.sample}_*min" -exec rm -rf {{}} +
         fi
         """

@@ -1,5 +1,6 @@
 # run_qdnaseq_ace.R
-# Usage: Rscript run_qdnaseq_ace.R <sample_id> <adjusted_bam_path>
+# Usage:
+#   Rscript run_qdnaseq_ace.R <sample_id> <adjusted_bam_path> [output_dir]
 
 args <- commandArgs(trailingOnly = TRUE)
 script_arg <- grep("^--file=", commandArgs(), value = TRUE)
@@ -7,15 +8,21 @@ script_path <- normalizePath(sub("^--file=", "", script_arg[1]), mustWork = TRUE
 repo_root <- normalizePath(file.path(dirname(script_path), ".."), mustWork = TRUE)
 
 if (length(args) < 2) {
-  stop("Not enough arguments provided. Usage: Rscript run_qdnaseq_ace.R <sample_id> <adjusted_bam_path>")
+  stop("Usage: Rscript run_qdnaseq_ace.R <sample_id> <adjusted_bam_path> [output_dir]")
 }
 
 sample_id <- args[1]
-bam_path <- normalizePath(args[2], mustWork = TRUE)
-cat(sprintf("Running QDNAseq + ACE for %s\n", sample_id))
+bam_path  <- normalizePath(args[2], mustWork = TRUE)
 
-base_dir <- file.path(repo_root, "results", sample_id, "QDNAseq_ACE")
+if (length(args) >= 3) {
+  base_dir <- args[3]
+} else {
+  base_dir <- file.path(repo_root, "results", sample_id, "QDNAseq_ACE")
+}
 dir.create(base_dir, recursive = TRUE, showWarnings = FALSE)
+
+cat(sprintf("Running QDNAseq + ACE for %s\n", sample_id))
+cat(sprintf("Output directory: %s\n", base_dir))
 
 suppressMessages({
   library(QDNAseq)
@@ -63,7 +70,7 @@ plot(copyNumbersSegmented)
 dev.off()
 
 summary_file <- file.path(base_dir, "ACE_summary.tsv")
-plot_file <- file.path(base_dir, paste0(sample_id, "_ACE_matrixplot.png"))
+plot_file    <- file.path(base_dir, paste0(sample_id, "_ACE_matrixplot.png"))
 
 ace_fun_candidates <- c(
   file.path(repo_root, "scripts", "ACE_functions.R"),
