@@ -7,6 +7,7 @@ suppressPackageStartupMessages({
   library(tidyr)
   library(grid)
   library(png)
+  library(scales)
 })
 
 # ------------------------ Args ------------------------
@@ -189,72 +190,39 @@ plot_df_top10 <- plot_df %>%
   left_join(reads_df, by = "time_min") %>%
   arrange(time_min)
 
-has_reads <- any(!is.na(plot_df_top10$estimated_reads)) &&
-             max(plot_df_top10$estimated_reads, na.rm = TRUE) > 0
+read_label_df <- plot_df_top10 %>%
+  distinct(time_min, estimated_reads) %>%
+  arrange(time_min)
 
-if (has_reads) {
-  max_reads <- max(plot_df_top10$estimated_reads, na.rm = TRUE)
-
-  read_curve_df <- plot_df_top10 %>%
-    distinct(time_min, estimated_reads) %>%
-    arrange(time_min) %>%
-    mutate(reads_scaled = estimated_reads / max_reads)
-
-  p <- ggplot(plot_df_top10, aes(x = time_min)) +
-    geom_line(aes(y = confidence, color = predicted_class), linewidth = 1) +
-    geom_point(aes(y = confidence, color = predicted_class), size = 1.2) +
-    geom_line(
-      data = read_curve_df,
-      aes(x = time_min, y = reads_scaled, group = 1),
-      inherit.aes = FALSE,
-      linewidth = 0.9,
-      linetype = "longdash",
-      color = "black"
-    ) +
-    geom_point(
-      data = read_curve_df,
-      aes(x = time_min, y = reads_scaled),
-      inherit.aes = FALSE,
-      size = 1.2,
-      color = "black"
-    ) +
-    geom_hline(yintercept = 0.80, linetype = "dotted", color = "goldenrod2") +
-    geom_hline(yintercept = 0.95, linetype = "dotted", color = "red") +
-    scale_y_continuous(
-      name = "Sturgeon confidence",
-      limits = c(0, 1),
-      sec.axis = sec_axis(~ . * max_reads, name = "Estimated cumulative reads")
-    ) +
-    theme_minimal(base_size = 11) +
-    labs(
-      title = paste0(sample_id, ": Sturgeon confidence over time"),
-      x = "Time (min)",
-      color = "Tumor class"
-    ) +
-    scale_color_brewer(palette = "Set1") +
-    theme(
-      plot.title = element_text(face = "bold"),
-      legend.position = "right"
-    )
-} else {
-  p <- ggplot(plot_df_top10, aes(x = time_min, y = confidence, color = predicted_class)) +
-    geom_line(linewidth = 1) +
-    geom_point(size = 1.2) +
-    geom_hline(yintercept = 0.80, linetype = "dotted", color = "goldenrod2") +
-    geom_hline(yintercept = 0.95, linetype = "dotted", color = "red") +
-    theme_minimal(base_size = 11) +
-    labs(
-      title = paste0(sample_id, ": Sturgeon confidence over time"),
-      x = "Time (min)",
-      y = "Sturgeon confidence",
-      color = "Tumor class"
-    ) +
-    scale_color_brewer(palette = "Set1") +
-    theme(
-      plot.title = element_text(face = "bold"),
-      legend.position = "right"
-    )
-}
+p <- ggplot(plot_df_top10, aes(x = time_min, y = confidence, color = predicted_class)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 1.2) +
+  geom_hline(yintercept = 0.80, linetype = "dotted", color = "goldenrod2") +
+  geom_hline(yintercept = 0.95, linetype = "dotted", color = "red") +
+  geom_text(
+    data = read_label_df,
+    aes(x = time_min, y = 1.02, label = scales::comma(round(estimated_reads))),
+    inherit.aes = FALSE,
+    size = 3,
+    angle = 45,
+    hjust = 0,
+    vjust = 0
+  ) +
+  annotate("text", x = min(read_label_df$time_min), y = 1.08,
+           label = "Cumulative reads", hjust = 0, size = 3.5, fontface = "bold") +
+  theme_minimal(base_size = 11) +
+  labs(
+    title = paste0(sample_id, ": Sturgeon confidence over time"),
+    x = "Time (min)",
+    y = "Sturgeon confidence",
+    color = "Tumor class"
+  ) +
+  scale_y_continuous(limits = c(0, 1.1)) +
+  scale_color_hue() +
+  theme(
+    plot.title = element_text(face = "bold"),
+    legend.position = "right"
+  )
 
 # ------------------------ Export PDF with CNV pages ------------------------
 pdf(output_pdf, width = 10, height = 7)
@@ -274,16 +242,40 @@ if (nrow(cnv_df_existing) > 0) {
 
     if (!is.null(img)) {
       grid.newpage()
+
       grid.text(
         paste0(sample_id, " - CNV profile at ", t, " min"),
         y = unit(0.97, "npc"),
         gp = gpar(fontsize = 14, fontface = "bold")
       )
+
+      # Get page area to draw into (fractions of page)
+      page_width_npc  <- 0.95  # fraction of page width
+      page_height_npc <- 0.86  # fraction of page height
+      page_aspect <- page_width_npc / page_height_npc
+
+      img_h <- nrow(img)
+      img_w <- ncol(img)
+      img_aspect <- img_w / img_h
+
+      # Scale while preserving aspect ratio
+      if (img_aspect > page_aspect) {
+        # image is wider than page box → width-limited
+        draw_w <- page_width_npc
+        draw_h <- page_width_npc / img_aspect
+      } else {
+        # image is taller than page box → height-limited
+        draw_h <- page_height_npc
+        draw_w <- page_height_npc * img_aspect
+      }
+
+      # Draw centered
       grid.raster(
         img,
-        x = 0.5, y = 0.47,
-        width = unit(0.95, "npc"),
-        height = unit(0.88, "npc"),
+        x = 0.5,
+        y = 0.5,  # center vertically
+        width = unit(draw_w, "npc"),
+        height = unit(draw_h, "npc"),
         interpolate = FALSE
       )
     }
