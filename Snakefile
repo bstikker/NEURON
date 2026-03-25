@@ -40,6 +40,8 @@ def estimate_mem_mb(wildcards):
 rule all:
     input:
         expand("results/{sample}/merged_probes_methyl_calls_general.csv", sample=SAMPLES),
+        expand("results/{sample}/sturgeon_v2_outcome.csv", sample=SAMPLES),
+        expand("results/{sample}/sturgeon_v2_outcome.png", sample=SAMPLES),
         expand("results/{sample}/QDNAseq_ACE/{sample}_CNV.png", sample=SAMPLES),
         expand("results/{sample}/QDNAseq_ACE/{sample}_CGHcall_segments.tsv", sample=SAMPLES),
         expand("results/{sample}/QDNAseq_ACE/ACE_summary.tsv", sample=SAMPLES),
@@ -53,7 +55,8 @@ rule sturgeon:
         modkit_txt=temp("results/{sample}/modkit_extracted.txt"),
         sturgeon_csv="results/{sample}/merged_probes_methyl_calls_general.csv",
         adjusted_bam=temp("results/{sample}/adjusted_merged_sorted.bam"),
-        sturgeon_pdf="results/{sample}/merged_probes_methyl_calls_general.pdf"
+        sturgeon_pdf="results/{sample}/merged_probes_methyl_calls_general.pdf",
+        bed="results/{sample}/merged_probes_methyl_calls.bed"
     threads: THREADS.get("sturgeon", 10)
     resources:
         mem_mb=estimate_mem_mb,  # dynamically estimate per sample
@@ -129,28 +132,48 @@ rule mgmt_predict_promoter:
         Rscript scripts/mgmt_analysis.R             --modkit {input.modkit}             --model {input.model}             --bed {input.bed}             --out {output.result}             --verbose
         """
 
+rule sturgeon_v2:
+    input:
+        bed="results/{sample}/merged_probes_methyl_calls.bed",
+        model="reference/models/cns-v2.zip"  # replace with actual model filename
+    output:
+        csv="results/{sample}/sturgeon_v2_outcome.csv",
+        png="results/{sample}/sturgeon_v2_outcome.png"
+    params:
+        env_bin="/home/P092309/miniconda3/envs/snakemake/bin",  # your local pip environment
+        rscript="scripts/plot_sturgeon_v2.R"
+    shell:
+        """
+        # Activate the conda environment (optional)
+        {params.env_bin}/sturgeon-v2 -i {input.bed} -m {input.model} -o {output.csv} -f bed
+
+        # Generate PNG plot
+        Rscript {params.rscript} {output.csv} {wildcards.sample} {output.png}
+        """
+
 rule report:
     input:
         sturgeon_pdf="results/{sample}/merged_probes_methyl_calls_general.pdf",
         mgmt="results/{sample}/MGMT_analysis/mgmt_prediction.tsv",
         cnv="results/{sample}/QDNAseq_ACE/{sample}_CNV.png",
         ace="results/{sample}/QDNAseq_ACE/ACE_summary.tsv",
-        rmd="scripts/report.Rmd"        
+        sturgeon_v2_png="results/{sample}/sturgeon_v2_outcome.png",
+        rmd="scripts/report.Rmd"
     output:
         pdf="results/{sample}/final_report.pdf"
     params:
-        outdir=lambda wildcards: f"results/{wildcards.sample}",
-        sample="{sample}"
+        sample="{sample}",
+        outdir=lambda wildcards: f"results/{wildcards.sample}"
     container:
         CONTAINER
     shell:
         r"""
-        Rscript -e "rmarkdown::render(\
-          input = 'scripts/report.Rmd', \
-          params = list(sample = '{wildcards.sample}'), \
-          output_dir = normalizePath('results/{wildcards.sample}', mustWork = TRUE), \
-          output_file = 'final_report.pdf', \
-          knit_root_dir = normalizePath('.', mustWork = TRUE) \
+        Rscript -e "rmarkdown::render(
+            input = '{input.rmd}',
+            params = list(sample = '{wildcards.sample}'),
+            output_dir = normalizePath('{params.outdir}', mustWork = TRUE),
+            output_file = 'final_report.pdf',
+            knit_root_dir = normalizePath('.', mustWork = TRUE)
         )"
         """
 

@@ -1,12 +1,12 @@
 ---
 title: "Molecular Diagnostics CNS Tumor Report"
-author: "Dr. Bernard Stikker"
+author: "Bernard Stikker"
 output:
   pdf_document:
     latex_engine: xelatex
 params:
   sample: "SAMPLE_NAME"
-knit_root_dir: '.'
+  knit_root_dir: '.'
 ---
 
 ```{r setup, include=FALSE}
@@ -24,6 +24,17 @@ if (file.exists(sturgeon_plot_path)) {
   knitr::include_graphics(normalizePath(sturgeon_plot_path, mustWork = TRUE), rel_path = FALSE)
 } else {
   cat("Sturgeon classification plot not found.")
+}
+```
+
+# Sturgeon V2 classification
+```{r sturgeon_v2_plot}
+sturgeon_v2_plot_path <- file.path("results", params$sample, "sturgeon_v2_outcome.png")
+
+if (file.exists(sturgeon_v2_plot_path)) {
+  knitr::include_graphics(normalizePath(sturgeon_v2_plot_path, mustWork = TRUE), rel_path = FALSE)
+} else {
+  cat("Sturgeon v2 classification plot not found.")
 }
 ```
 
