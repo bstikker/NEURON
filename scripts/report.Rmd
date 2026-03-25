@@ -1,11 +1,13 @@
 ---
-title: "Molecular Diagnostics CNS Tumor Report"
-author: "Bernard Stikker"
+title: "Sturgeon/nanopore molecular report"
+subtitle: "Pipeline version: `r params$version` | Run date: `r params$rundate` | Sample ID: `r params$sample`"
 output:
   pdf_document:
     latex_engine: xelatex
 params:
   sample: "SAMPLE_NAME"
+  version: "VERSION_PLACEHOLDER"
+  rundate: "RUN_DATE_PLACEHOLDER"
   knit_root_dir: '.'
 ---
 

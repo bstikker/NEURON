@@ -163,15 +163,20 @@ rule report:
         pdf="results/{sample}/final_report.pdf"
     params:
         sample="{sample}",
-        outdir=lambda wildcards: f"results/{wildcards.sample}"
+        version="v1.0.0",  # your pipeline version
+        rundate=lambda wildcards: __import__("datetime").datetime.today().strftime("%Y-%m-%d")
     container:
         CONTAINER
     shell:
         r"""
         Rscript -e "rmarkdown::render(
             input = '{input.rmd}',
-            params = list(sample = '{wildcards.sample}'),
-            output_dir = normalizePath('{params.outdir}', mustWork = TRUE),
+            params = list(
+                sample = '{wildcards.sample}',
+                version = '{params.version}',
+                rundate = '{params.rundate}'
+            ),
+            output_dir = normalizePath('results/{wildcards.sample}', mustWork = TRUE),
             output_file = 'final_report.pdf',
             knit_root_dir = normalizePath('.', mustWork = TRUE)
         )"
