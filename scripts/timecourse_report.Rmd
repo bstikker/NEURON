@@ -1,25 +1,28 @@
-#!/usr/bin/env Rscript
-options(stringsAsFactors = FALSE)
+---
+title: "`r params$sample_id` Timecourse Report"
+output:
+  pdf_document:
+    latex_engine: xelatex
+params:
+  sample_id: "TVU19-13652"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
 
 suppressPackageStartupMessages({
   library(ggplot2)
   library(dplyr)
   library(tidyr)
-  library(grid)
-  library(png)
+  library(readr)
+  library(knitr)
   library(scales)
+  library(stringr)
 })
 
-args <- commandArgs(trailingOnly = TRUE)
-if (length(args) < 3) {
-  stop("Usage: Rscript aggregate_sturgeon_v2_timecourse_fixed.R <sample_dir> <output_pdf> <summary_tsv> [read_counts_tsv]")
-}
-
-sample_dir      <- normalizePath(args[1], mustWork = TRUE)
-output_pdf      <- args[2]
-summary_tsv     <- args[3]
-read_counts_tsv <- if (length(args) >= 4) args[4] else NA_character_
-sample_id       <- basename(sample_dir)
+sample_id  <- params$sample_id
+sample_dir <- normalizePath(file.path("results", sample_id), winslash = "/", mustWork = TRUE)
+read_counts_tsv <- file.path("read_lists", sample_id, paste0(sample_id, "_read_counts.tsv"))
 
 safe_read_tsv <- function(f) {
   tryCatch(read.delim(f, stringsAsFactors = FALSE, check.names = FALSE), error = function(e) NULL)
@@ -109,6 +112,25 @@ parse_sturgeon_v2_csv <- function(f, sample_id) {
 
 sturgeon_files <- list.files(sample_dir, pattern = "merged_probes_methyl_calls_general.csv$", recursive = TRUE, full.names = TRUE)
 v2_files       <- list.files(sample_dir, pattern = "sturgeon_v2_outcome.csv$", recursive = TRUE, full.names = TRUE)
+cnv_files <- list.files(
+  sample_dir,
+  recursive = TRUE,
+  full.names = TRUE
+) %>%
+  .[grepl("/QDNAseq_ACE/.*_CNV\\.png$", ., perl = TRUE)]
+
+cnv_df <- data.frame(
+  cnv_png = cnv_files,
+  time_min = sapply(cnv_files, infer_time_from_path, sample_id = sample_id),
+  stringsAsFactors = FALSE
+) %>%
+  dplyr::filter(!is.na(time_min), file.exists(cnv_png)) %>%
+  dplyr::arrange(time_min)
+
+message("Found ", length(cnv_files), " CNV PNG files")
+if (length(cnv_files) > 0) {
+  message(paste(cnv_files, collapse = "\n"))
+}
 
 sturgeon_df <- bind_rows(Filter(Negate(is.null), lapply(sturgeon_files, parse_sturgeon_csv, sample_id = sample_id)))
 v2_df       <- bind_rows(Filter(Negate(is.null), lapply(v2_files, parse_sturgeon_v2_csv, sample_id = sample_id)))
@@ -124,15 +146,14 @@ all_df <- bind_rows(sturgeon_df, v2_df) %>%
   filter(!is.na(time_min), !is.na(confidence))
 
 if (nrow(all_df) == 0) {
-  stop("No valid Sturgeon/Sturgeon v2 timecourse rows found in sample_dir")
+  stop("No valid Sturgeon/Sturgeon v2 timecourse rows found under: ", sample_dir)
 }
 
-# One fixed palette across both plots so shared classes keep the same color.
 palette_keys <- sort(unique(all_df$display_class))
-fixed_palette <- setNames(grDevices::hcl.colors(length(palette_keys), palette = "Dark 3"), palette_keys)
+fixed_palette <- setNames(grDevices::hcl.colors(length(palette_keys), palette = "Dynamic"), palette_keys)
 
 reads_df <- NULL
-if (!is.na(read_counts_tsv) && file.exists(read_counts_tsv)) {
+if (file.exists(read_counts_tsv)) {
   reads_df <- safe_read_tsv(read_counts_tsv)
 }
 
@@ -153,9 +174,10 @@ summary_table <- all_df %>%
   left_join(reads_df, by = "time_min") %>%
   select(classifier, time_min, estimated_reads, confidence, predicted_class, display_class, cpg_used, source_csv)
 
+summary_tsv_out <- file.path(sample_dir, paste0(sample_id, "_timecourse_summary.tsv"))
 write.table(
   summary_table,
-  file = summary_tsv,
+  file = summary_tsv_out,
   sep = "\t",
   quote = FALSE,
   row.names = FALSE
@@ -180,22 +202,11 @@ plot_classifier <- function(df, title_text, ylab_text) {
     distinct(time_min, estimated_reads) %>%
     arrange(time_min)
 
-  ggplot(plot_df, aes(x = time_min, y = confidence, color = display_class, group = display_class)) +
+  p <- ggplot(plot_df, aes(x = time_min, y = confidence, color = display_class, group = display_class)) +
     geom_line(linewidth = 1) +
     geom_point(size = 1.2) +
     geom_hline(yintercept = 0.80, linetype = "dotted", color = "goldenrod2") +
     geom_hline(yintercept = 0.95, linetype = "dotted", color = "red") +
-    geom_text(
-      data = read_label_df,
-      aes(x = time_min, y = 1.02, label = scales::comma(round(estimated_reads))),
-      inherit.aes = FALSE,
-      size = 3,
-      angle = 45,
-      hjust = 0,
-      vjust = 0
-    ) +
-    annotate("text", x = min(read_label_df$time_min), y = 1.08,
-             label = "Cumulative reads", hjust = 0, size = 3.5, fontface = "bold") +
     theme_minimal(base_size = 11) +
     labs(
       title = paste0(sample_id, ": ", title_text),
@@ -209,68 +220,113 @@ plot_classifier <- function(df, title_text, ylab_text) {
       plot.title = element_text(face = "bold"),
       legend.position = "right"
     )
+
+  if (nrow(read_label_df) > 0 && any(!is.na(read_label_df$estimated_reads))) {
+    p <- p +
+      geom_text(
+        data = read_label_df,
+        aes(x = time_min, y = 1.02, label = scales::comma(round(estimated_reads))),
+        inherit.aes = FALSE,
+        size = 3,
+        angle = 45,
+        hjust = 0,
+        vjust = 0
+      ) +
+      annotate(
+        "text",
+        x = min(read_label_df$time_min, na.rm = TRUE),
+        y = 1.08,
+        label = "Cumulative reads",
+        hjust = 0,
+        size = 3.5,
+        fontface = "bold"
+      )
+  }
+
+  p
 }
 
-cnv_files <- list.files(sample_dir, pattern = "_CNV\\.png$", recursive = TRUE, full.names = TRUE)
-cnv_df <- data.frame(
-  cnv_png = cnv_files,
-  time_min = sapply(cnv_files, infer_time_from_path, sample_id = sample_id),
-  stringsAsFactors = FALSE
-) %>%
-  filter(!is.na(time_min)) %>%
-  arrange(time_min)
+```
 
-pdf(output_pdf, width = 10, height = 7)
+# Sturgeon v1 timecourse
 
-p1 <- plot_classifier(filter(all_df, classifier == "Sturgeon"), "Sturgeon confidence over time", "Sturgeon confidence")
-if (!is.null(p1)) print(p1)
+```{r sturgeon-v1-timecourse, fig.width=10, fig.height=7, out.width='95%', fig.align='center'}
+p1 <- plot_classifier(
+  dplyr::filter(all_df, classifier == "Sturgeon"),
+  "Sturgeon confidence over time",
+  "Sturgeon confidence"
+)
 
-p2 <- plot_classifier(filter(all_df, classifier == "Sturgeon v2"), "Sturgeon v2 confidence over time", "Sturgeon v2 confidence")
-if (!is.null(p2)) print(p2)
+if (!is.null(p1)) {
+  print(p1)
+} else {
+  cat("No Sturgeon v1 timecourse data found.")
+}
+```
 
-if (nrow(cnv_df) > 0) {
+\newpage
+# Sturgeon v2 timecourse
+
+```{r sturgeon-v2-timecourse, fig.width=10, fig.height=7, out.width='95%', fig.align='center'}
+p2 <- plot_classifier(
+  dplyr::filter(all_df, classifier == "Sturgeon v2"),
+  "Sturgeon v2 confidence over time",
+  "Sturgeon v2 confidence"
+)
+
+if (!is.null(p2)) {
+  print(p2)
+} else {
+  cat("No Sturgeon v2 timecourse data found.")
+}
+```
+
+\newpage
+# Timecourse summary
+
+```{r timecourse-summary}
+if (nrow(summary_table) > 0) {
+  kable(summary_table, caption = "Top prediction per time point and classifier")
+  cat("\n\nSummary TSV written to: ", summary_tsv_out, "\n", sep = "")
+} else {
+  cat("No timecourse summary could be generated.")
+}
+```
+
+\newpage
+# CNV profiles over time
+
+```{r cnv-images, results='asis', echo=FALSE, warning=FALSE, message=TRUE}
+cat("\\newpage\n")
+cat("# CNV profiles\n\n")
+
+if (nrow(cnv_df) == 0) {
+  cat("No CNV profile PNGs were found.\n")
+} else {
   for (i in seq_len(nrow(cnv_df))) {
-    f <- cnv_df$cnv_png[i]
+    f <- normalizePath(cnv_df$cnv_png[i], winslash = "/", mustWork = TRUE)
     t <- cnv_df$time_min[i]
-    img <- tryCatch(readPNG(f), error = function(e) NULL)
 
-    if (!is.null(img)) {
-      grid.newpage()
-      grid.text(
-        paste0(sample_id, " - CNV profile at ", t, " min"),
-        y = unit(0.96, "npc"),
-        gp = gpar(fontsize = 14, fontface = "bold")
-      )
+    message("Including CNV PNG: ", f)
 
-      # Slightly narrower and taller drawing box so the CNV panels no longer look
-      # stretched in width compared with the final diagnostic report.
-      page_width_npc  <- 0.84
-      page_height_npc <- 0.68
-      page_aspect <- page_width_npc / page_height_npc
+    cat(sprintf("## %s min\n\n", t))
+    cat("\\begin{center}\n")
+    cat(sprintf(
+      "\\includegraphics[width=0.95\\linewidth]{\\detokenize{%s}}\n",
+      f
+    ))
+    cat("\\end{center}\n\n")
 
-      img_h <- nrow(img)
-      img_w <- ncol(img)
-      img_aspect <- img_w / img_h
-
-      if (img_aspect > page_aspect) {
-        draw_w <- page_width_npc
-        draw_h <- page_width_npc / img_aspect
-      } else {
-        draw_h <- page_height_npc
-        draw_w <- page_height_npc * img_aspect
-      }
-
-      grid.raster(
-        img,
-        x = 0.5,
-        y = 0.44,
-        width = unit(draw_w, "npc"),
-        height = unit(draw_h, "npc"),
-        interpolate = FALSE
-      )
+    if (i < nrow(cnv_df)) {
+      cat("\\newpage\n")
     }
   }
 }
 
-dev.off()
-cat("\nReport written to", output_pdf, "\n")
+# Report metadata
+
+```{r metadata}
+cat("Report generated on:", Sys.Date(), "\n")
+cat("User:", Sys.info()[['user']], "\n")
+cat("Sample directory:", normalizePath(sample_dir, mustWork = FALSE), "\n")
+```

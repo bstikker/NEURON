@@ -266,6 +266,9 @@ rule qdnaseq_ace_timecourse:
 # Timecourse workflow
 # -----------------------------
 
+SAMPLES = config["samples"].keys()
+TIME_BINS = config["timecourse"]["bins"]
+
 rule generate_read_lists:
     input:
         summary=lambda wc: config["samples"][wc.sample]["sequencing_summary"]
@@ -333,36 +336,40 @@ rule sturgeon_v2_timecourse:
         {params.env_bin}/sturgeon-v2 -i {input.bed} -m {input.model} -o {output.csv} -f bed
         """
 
-
-rule aggregate_timecourse:
+rule timecourse_rmd:
     input:
-        sturgeon_csvs=expand(
+        sturgeon_v1_csvs=expand(
             "results/{{sample}}/{{sample}}_{timebin}min/merged_probes_methyl_calls_general.csv",
-            timebin=TIMECourse_BINS
+            timebin=TIME_BINS
         ),
         sturgeon_v2_csvs=expand(
             "results/{{sample}}/{{sample}}_{timebin}min/sturgeon_v2_outcome.csv",
-            timebin=TIMECourse_BINS
+            timebin=TIME_BINS
         ),
         cnv_pngs=expand(
             "results/{{sample}}/{{sample}}_{timebin}min/QDNAseq_ACE/{{sample}}_{timebin}min_CNV.png",
-            timebin=TIMECourse_CNV_BINS
+            timebin=TIME_BINS
         ),
         read_counts="read_lists/{sample}/{sample}_read_counts.tsv"
     output:
-        pdf="results/{sample}/{sample}_timecourse.pdf",
-        summary="results/{sample}/{sample}_timecourse.tsv"
+        pdf="results/{sample}/{sample}_timecourse.pdf"
     params:
-        rscript="scripts/aggregate_sturgeon_v2_timecourse.R"
+        sample_id="{sample}"
     container:
         CONTAINER
     shell:
+        r"""
+        Rscript -e "rmarkdown::render(
+            input = 'scripts/timecourse_report.Rmd',
+            params = list(
+                sample_id = '{wildcards.sample}'
+            ),
+            output_dir = normalizePath('results/{wildcards.sample}', mustWork = TRUE),
+            output_file = '{wildcards.sample}_timecourse.pdf',
+            knit_root_dir = normalizePath('.', mustWork = TRUE)
+        )"
         """
-        Rscript {params.rscript} results/{wildcards.sample} {output.pdf} {output.summary} {input.read_counts}
-        """
-
 
 rule all_timecourse:
     input:
-        pdf=expand("results/{sample}/{sample}_timecourse.pdf", sample=[s for s in SAMPLES if has_timecourse(s)]),
-        summary=expand("results/{sample}/{sample}_timecourse.tsv", sample=[s for s in SAMPLES if has_timecourse(s)])
+        pdfs=expand("results/{sample}/{sample}_timecourse.pdf", sample=SAMPLES)

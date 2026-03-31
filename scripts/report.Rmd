@@ -30,7 +30,7 @@ if (file.exists(sturgeon_plot_path)) {
 ```
 
 # Sturgeon V2 classification
-```{r sturgeon_v2_plot}
+```{r sturgeon_v2_plot, out.width='90%', fig.align='center'}
 sturgeon_v2_plot_path <- file.path("results", params$sample, "sturgeon_v2_outcome.png")
 
 if (file.exists(sturgeon_v2_plot_path)) {
@@ -40,6 +40,7 @@ if (file.exists(sturgeon_v2_plot_path)) {
 }
 ```
 
+\newpage
 # MGMT Promoter Methylation
 ```{r MGMT}
 mgmt_path <- file.path("results", params$sample, "MGMT_analysis", "mgmt_prediction.tsv")
@@ -51,8 +52,9 @@ if (file.exists(mgmt_path)) {
 }
 ```
 
+\newpage
 # CNV Profile
-```{r CNV}
+```{r CNV, out.width='90%', fig.align='center'}
 cnv_path <- file.path("results", params$sample, "QDNAseq_ACE", paste0(params$sample, "_CNV.png"))
 if (file.exists(cnv_path)) {
   knitr::include_graphics(normalizePath(cnv_path, mustWork = TRUE), rel_path = FALSE)
