@@ -150,7 +150,11 @@ if (nrow(all_df) == 0) {
 }
 
 palette_keys <- sort(unique(all_df$display_class))
-fixed_palette <- setNames(grDevices::hcl.colors(length(palette_keys), palette = "Dynamic"), palette_keys)
+
+fixed_palette <- setNames(
+  scales::hue_pal(l = 55, c = 150)(length(palette_keys)),
+  palette_keys
+)
 
 reads_df <- NULL
 if (file.exists(read_counts_tsv)) {
@@ -282,21 +286,10 @@ if (!is.null(p2)) {
 ```
 
 \newpage
-# Timecourse summary
 
-```{r timecourse-summary}
-if (nrow(summary_table) > 0) {
-  kable(summary_table, caption = "Top prediction per time point and classifier")
-  cat("\n\nSummary TSV written to: ", summary_tsv_out, "\n", sep = "")
-} else {
-  cat("No timecourse summary could be generated.")
-}
-```
-
-\newpage
 # CNV profiles over time
 
-```{r cnv-images, results='asis', echo=FALSE, warning=FALSE, message=TRUE}
+```{r cnv-images, results='asis', echo=FALSE, warning=FALSE, message=FALSE}
 cat("\\newpage\n")
 cat("# CNV profiles\n\n")
 
