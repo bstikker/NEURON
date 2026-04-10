@@ -164,7 +164,6 @@ rule sturgeon_v2:
         Rscript {params.rscript} {output.csv} {wildcards.sample} {output.png}
         """
 
-
 rule report:
     input:
         sturgeon_pdf="results/{sample}/merged_probes_methyl_calls_general.pdf",
@@ -183,6 +182,16 @@ rule report:
         CONTAINER
     shell:
         r"""
+        set -euo pipefail
+
+        OUTDIR="results/{wildcards.sample}"
+
+        rm -f "$OUTDIR"/final_report.aux \
+              "$OUTDIR"/final_report.log \
+              "$OUTDIR"/final_report.out \
+              "$OUTDIR"/final_report.toc
+
+        set +e
         Rscript -e "rmarkdown::render(
             input = '{input.rmd}',
             params = list(
@@ -190,12 +199,30 @@ rule report:
                 version = '{params.version}',
                 rundate = '{params.rundate}'
             ),
-            output_dir = normalizePath('results/{wildcards.sample}', mustWork = TRUE),
+            output_dir = normalizePath('$OUTDIR', mustWork = TRUE),
             output_file = 'final_report.pdf',
             knit_root_dir = normalizePath('.', mustWork = TRUE)
         )"
-        """
+        RSTATUS=$?
+        set -e
 
+        if [[ $RSTATUS -ne 0 ]]; then
+            echo "rmarkdown::render() failed; attempting fallback compile from existing TeX."
+
+            if [[ -f "$OUTDIR/final_report.tex" ]]; then
+                (
+                    cd "$OUTDIR"
+                    xelatex -interaction=nonstopmode -halt-on-error final_report.tex
+                    xelatex -interaction=nonstopmode -halt-on-error final_report.tex
+                )
+            else
+                echo "No final_report.tex found, cannot run fallback XeLaTeX compile."
+                exit $RSTATUS
+            fi
+        fi
+
+        test -f "$OUTDIR/final_report.pdf"
+        """
 
 rule subset_bam_for_cnv_timepoint:
     input:

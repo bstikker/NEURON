@@ -4,6 +4,7 @@ subtitle: "Pipeline version: `r params$version` | Run date: `r params$rundate` |
 output:
   pdf_document:
     latex_engine: xelatex
+    keep_tex: true
 params:
   sample: "SAMPLE_NAME"
   version: "VERSION_PLACEHOLDER"
@@ -30,7 +31,7 @@ if (file.exists(sturgeon_plot_path)) {
 ```
 
 # Sturgeon V2 classification
-```{r sturgeon_v2_plot, out.width='90%', fig.align='center'}
+```{r sturgeon_v2_plot, out.width='100%', fig.align='center'}
 sturgeon_v2_plot_path <- file.path("results", params$sample, "sturgeon_v2_outcome.png")
 
 if (file.exists(sturgeon_v2_plot_path)) {
