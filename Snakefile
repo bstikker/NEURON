@@ -184,13 +184,21 @@ rule report:
         r"""
         set -euo pipefail
 
-        OUTDIR="results/{wildcards.sample}"
+        SAMPLE="{wildcards.sample}"
+        OUTDIR="$(pwd)/results/{wildcards.sample}"
+        TMP_RENDER_DIR="$(mktemp -d "${{TMPDIR:-/tmp}}/${{SAMPLE}}_report_XXXXXX")"
 
-        rm -f "$OUTDIR"/final_report.aux \
-              "$OUTDIR"/final_report.log \
-              "$OUTDIR"/final_report.out \
-              "$OUTDIR"/final_report.toc
+        cleanup() {{
+            rm -rf "$TMP_RENDER_DIR"
+        }}
+        trap cleanup EXIT
 
+        mkdir -p "$OUTDIR"
+
+        # Remove any old final output in the sample folder
+        rm -f "$OUTDIR/final_report.pdf"
+
+        # Render into a unique temp directory for this run only
         set +e
         Rscript -e "rmarkdown::render(
             input = '{input.rmd}',
@@ -199,7 +207,8 @@ rule report:
                 version = '{params.version}',
                 rundate = '{params.rundate}'
             ),
-            output_dir = normalizePath('$OUTDIR', mustWork = TRUE),
+            output_dir = normalizePath('$TMP_RENDER_DIR', mustWork = TRUE),
+            intermediates_dir = normalizePath('$TMP_RENDER_DIR', mustWork = TRUE),
             output_file = 'final_report.pdf',
             knit_root_dir = normalizePath('.', mustWork = TRUE)
         )"
@@ -207,20 +216,22 @@ rule report:
         set -e
 
         if [[ $RSTATUS -ne 0 ]]; then
-            echo "rmarkdown::render() failed; attempting fallback compile from existing TeX."
+            echo "rmarkdown::render() failed; attempting fallback compile from TeX generated in this run."
 
-            if [[ -f "$OUTDIR/final_report.tex" ]]; then
+            if [[ -f "$TMP_RENDER_DIR/final_report.tex" ]]; then
                 (
-                    cd "$OUTDIR"
+                    cd "$TMP_RENDER_DIR"
                     xelatex -interaction=nonstopmode -halt-on-error final_report.tex
                     xelatex -interaction=nonstopmode -halt-on-error final_report.tex
                 )
             else
-                echo "No final_report.tex found, cannot run fallback XeLaTeX compile."
-                exit $RSTATUS
+                echo "No final_report.tex generated in current run; refusing to compile stale TeX."
+                exit 1
             fi
         fi
 
+        test -f "$TMP_RENDER_DIR/final_report.pdf"
+        mv "$TMP_RENDER_DIR/final_report.pdf" "$OUTDIR/final_report.pdf"
         test -f "$OUTDIR/final_report.pdf"
         """
 

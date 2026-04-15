@@ -38,21 +38,27 @@ plot_df <- data.frame(
 
 # Shared palette for consistent colors
 all_classes <- sort(unique(plot_df$display_class))
-palette_vec <- setNames(hcl.colors(length(all_classes),"Dark 3"), all_classes)
+palette_vec <- setNames(hcl.colors(length(all_classes), "Dark 3"), all_classes)
 
 # Plot
-p <- ggplot(plot_df, aes(x=display_class, y=confidence, fill=display_class)) +
+p <- ggplot(plot_df, aes(x = display_class, y = confidence, fill = display_class)) +
   geom_col() +
   scale_fill_manual(values = palette_vec) +
-  ylim(0,1) +
-  labs(title = paste0("Sturgeon v2 - ", sample_id),
-       x = "Tumor class",
-       y = "Confidence") +
+  ylim(0, 1) +
+  labs(
+    title = paste0("Sturgeon v2 - ", sample_id),
+    x = "Tumor class",
+    y = "Confidence"
+  ) +
   theme_minimal(base_size = 11) +
-  theme(axis.text.x = element_text(angle = 90, vjust=0.5, hjust=1),
-        legend.position = "none",
-        plot.title = element_text(face="bold"))
+  theme(
+    axis.text.x = element_text(size = 7, angle = 90, vjust = 0.5, hjust = 1),
+    axis.title.x = element_text(size = 9),
+    axis.title.y = element_text(size = 9),
+    plot.title = element_text(face = "bold", size = 11),
+    legend.position = "none"
+  )
 
-# Save PNG at smaller size to fit final_report
+# Save PNG at same dimensions
 ggsave(filename = out_png, plot = p, width = 7, height = 4, dpi = 300)
 cat("Sturgeon v2 plot written to", out_png, "\n")
