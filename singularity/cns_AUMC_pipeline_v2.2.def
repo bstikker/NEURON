@@ -1,0 +1,112 @@
+Bootstrap: docker
+From: rocker/r-ver:4.4.2
+
+%labels
+    Maintainer Bernard Stikker
+    Version v2.2
+
+%files
+    singularity/sturgeon.yml /sturgeon.yml
+    # IMPORTANT: replace this source path with the absolute path to your locally cloned private classifier repo.
+    /net/beegfs/users/P092309/Sturgeon_v2/sturgeon-v2/ /opt/sturgeon-v2
+
+%environment
+    export PATH=/opt/conda/envs/sturgeon_env/bin:/opt/conda/bin:$PATH
+    export LD_LIBRARY_PATH=/opt/conda/envs/sturgeon_env/lib:$LD_LIBRARY_PATH
+    export R_LIBS=/opt/R/libs
+    export LANG=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+
+%post
+    set -eux
+
+    ## --- System utilities and build tools ---
+    apt-get update && apt-get install -y \
+        wget \
+        curl \
+        git \
+        build-essential \
+        libcurl4-openssl-dev \
+        libssl-dev \
+        libxml2-dev \
+        libhdf5-dev \
+        libbz2-dev \
+        liblzma-dev \
+        zlib1g-dev \
+        libncurses-dev \
+        libreadline-dev \
+        libxt-dev \
+        libpng-dev \
+        libjpeg-dev \
+        libtiff5-dev \
+        libgtk2.0-dev \
+        libpango1.0-dev \
+        libcairo2-dev \
+        gfortran \
+        libblas-dev \
+        liblapack-dev \
+        pkg-config \
+        locales \
+        ca-certificates \
+        pandoc \
+        texlive-xetex \
+        texlive-fonts-recommended \
+        texlive-latex-recommended \
+        texlive-latex-extra \
+        && apt-get clean \
+        && rm -rf /var/lib/apt/lists/*
+
+    ## --- Locale settings ---
+    locale-gen en_US.UTF-8
+    update-locale LANG=en_US.UTF-8 || true
+    export LANG=en_US.UTF-8
+    export LC_ALL=en_US.UTF-8
+
+    ## --- Miniconda (pinned installer) ---
+    cd /tmp
+    MINICONDA_SH=Miniconda3-py311_24.11.1-0-Linux-x86_64.sh
+    wget -O ${MINICONDA_SH} https://repo.anaconda.com/miniconda/${MINICONDA_SH}
+    bash ${MINICONDA_SH} -b -p /opt/conda
+    rm -f ${MINICONDA_SH}
+
+    export PATH=/opt/conda/bin:$PATH
+    conda config --system --set auto_update_conda false
+    conda config --system --set channel_priority flexible
+
+    ## Avoid plugin-related issues during env creation, but only after install
+    export CONDA_NO_PLUGINS=true
+
+    ## --- Conda environment for Sturgeon/modkit ---
+    mkdir -p /opt/envs
+    cp /sturgeon.yml /opt/envs/sturgeon.yml
+    conda env create --solver classic -f /opt/envs/sturgeon.yml -n sturgeon_env
+
+    ## --- Install private classifier from local repo copied via %files ---
+    ## This avoids GitHub authentication during the container build.
+    ## The package is installed into the same conda environment as Sturgeon/modkit.
+    /opt/conda/envs/sturgeon_env/bin/python -m pip install --no-cache-dir /opt/sturgeon-v2
+
+    ## Optional sanity check: shows installed command-line entrypoints in the env.
+    ls -lah /opt/conda/envs/sturgeon_env/bin | grep -Ei 'sturgeon|classifier' || true
+
+    conda clean -a -y
+
+    ## --- R package installation ---
+    mkdir -p /opt/R/libs
+    chmod -R 777 /opt/R/libs
+    export R_LIBS=/opt/R/libs
+
+    Rscript -e "install.packages('BiocManager', repos='https://cloud.r-project.org', lib='/opt/R/libs')"
+    Rscript -e "BiocManager::install(c('QDNAseq', 'DNAcopy', 'ACE', 'Rsamtools', 'BiocGenerics', 'Biobase', 'ggplot2', 'data.table', 'readr', 'dplyr', 'tidyr', 'glue', 'rmarkdown', 'kableExtra', 'optparse', 'png'), ask=FALSE, update=TRUE, lib='/opt/R/libs')"
+
+%runscript
+    exec "$@"
+
+%help
+    Includes:
+    - R 4.4.2 with QDNAseq, ACE, rmarkdown
+    - Conda env from singularity/sturgeon.yml (modkit, sturgeon)
+    - Private classifier installed from local repo copied into /opt/sturgeon-v2
+    - LaTeX + Pandoc for rendering RMarkdown to PDF
+    - Build the runtime image with:
+      singularity build singularity/cns_AUMC_pipeline_v2.2.sif singularity/cns_AUMC_pipeline_v2.2.def
