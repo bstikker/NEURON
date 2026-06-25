@@ -1,15 +1,11 @@
 # 📦 NeuroTide
 
-(add your badges here)
-
-> *Your documentation is a direct reflection of your software, so hold it to the same standards.*
-
-
 ## 🌟 Highlights
 
-- Some functionality made easy!
-- This problem handled
-- etc.
+- Rapid brain tumor diagnosis
+- Copy Number Profiles
+- Estimated tumor purity
+- MGMT promoter methylation status
 
 
 ## ℹ️ Overview
@@ -43,10 +39,19 @@ snakemake --profile profile rule_timecourse
 
 ## ⬇️ Installation
 
-First install snakemake
-Install snakemake SLURM plugin
+If you haven't installed snakemake yet, this pipeline has been tested using version 9.8.1.
+```bash
+conda install -c conda-forge -c bioconda snakemake=8.30.0
+```
+As Helios uses SLURM as task manager, install the SLURM plugin
+```bash
+pip install snakemake-executor-plugin-slurm
+```
 Install singularity
+Helios has singularity installed as module
+
 Install from .def file
+
 
 
 ```bash
