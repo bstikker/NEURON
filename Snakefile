@@ -6,7 +6,7 @@ import os
 from datetime import datetime
 
 SAMPLES = list(config["samples"].keys())
-CONTAINER = config.get("container", "singularity/cns_AUMC_pipeline_v2.1.sif")
+CONTAINER = config.get("container", "singularity/cns_AUMC_pipeline_v2.2.sif")
 THREADS = config.get("threads", {})
 REFERENCES = config.get("references", {})
 TIMECONFIG = config.get("timecourse", {})
@@ -147,7 +147,6 @@ rule mgmt_predict_promoter:
             --verbose
         """
 
-
 rule sturgeon_v2:
     input:
         bed="results/{sample}/merged_probes_methyl_calls.bed",
@@ -156,12 +155,21 @@ rule sturgeon_v2:
         csv="results/{sample}/sturgeon_v2_outcome.csv",
         png="results/{sample}/sturgeon_v2_outcome.png"
     params:
-        env_bin="/home/P092309/miniconda3/envs/snakemake/bin",
         rscript="scripts/plot_sturgeon_v2.R"
+    container:
+        CONTAINER
     shell:
         """
-        {params.env_bin}/sturgeon-v2 -i {input.bed} -m {input.model} -o {output.csv} -f bed
-        Rscript {params.rscript} {output.csv} {wildcards.sample} {output.png}
+        sturgeon-v2 \
+            -i {input.bed} \
+            -m {input.model} \
+            -o {output.csv} \
+            -f bed
+
+        Rscript {params.rscript} \
+            {output.csv} \
+            {wildcards.sample} \
+            {output.png}
         """
 
 rule report:
@@ -234,6 +242,10 @@ rule report:
         mv "$TMP_RENDER_DIR/final_report.pdf" "$OUTDIR/final_report.pdf"
         test -f "$OUTDIR/final_report.pdf"
         """
+#---------------------
+# Timecourse analysis
+#---------------------
+
 
 rule subset_bam_for_cnv_timepoint:
     input:
@@ -299,11 +311,6 @@ rule qdnaseq_ace_timecourse:
             FALSE
         """
 
-
-# -----------------------------
-# Timecourse workflow
-# -----------------------------
-
 SAMPLES = config["samples"].keys()
 TIME_BINS = config["timecourse"]["bins"]
 
@@ -360,18 +367,21 @@ rule subset_and_run_sturgeon_timecourse:
             .
         """
 
-
 rule sturgeon_v2_timecourse:
     input:
         bed="results/{sample}/{sample}_{timebin}min/merged_probes_methyl_calls.bed",
         model="reference/models/cns-v2.zip"
     output:
         csv="results/{sample}/{sample}_{timebin}min/sturgeon_v2_outcome.csv"
-    params:
-        env_bin="/home/P092309/miniconda3/envs/snakemake/bin"
+    container:
+        CONTAINER
     shell:
         """
-        {params.env_bin}/sturgeon-v2 -i {input.bed} -m {input.model} -o {output.csv} -f bed
+        sturgeon-v2 \
+            -i {input.bed} \
+            -m {input.model} \
+            -o {output.csv} \
+            -f bed
         """
 
 rule timecourse_rmd:

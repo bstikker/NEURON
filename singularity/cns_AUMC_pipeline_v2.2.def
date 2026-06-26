@@ -97,7 +97,7 @@ From: rocker/r-ver:4.4.2
     export R_LIBS=/opt/R/libs
 
     Rscript -e "install.packages('BiocManager', repos='https://cloud.r-project.org', lib='/opt/R/libs')"
-    Rscript -e "BiocManager::install(c('QDNAseq', 'DNAcopy', 'ACE', 'Rsamtools', 'BiocGenerics', 'Biobase', 'ggplot2', 'data.table', 'readr', 'dplyr', 'tidyr', 'glue', 'rmarkdown', 'kableExtra', 'optparse', 'png'), ask=FALSE, update=TRUE, lib='/opt/R/libs')"
+    Rscript -e "BiocManager::install(c('QDNAseq', 'DNAcopy', 'ACE', 'Rsamtools', 'BiocGenerics', 'Biobase', 'ggplot2', 'data.table', 'readr', 'dplyr', 'tidyr', 'glue', 'rmarkdown', 'kableExtra', 'optparse', 'png'), ask=FALSE, update=FALSE, lib='/opt/R/libs')"
 
 %runscript
     exec "$@"

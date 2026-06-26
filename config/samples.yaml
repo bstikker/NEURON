@@ -1,10 +1,12 @@
-container: "singularity/cns_AUMC_pipeline_v2.1.sif"
+container: "singularity/cns_AUMC_pipeline_v2.2.sif" # Specify container path relative to container
 
+#Configure default resources
 threads:
   sturgeon: 10
   qdnaseq_ace: 8
   pseudotime: 10
 
+#Do not change references or timecourse definitions!
 references:
   sturgeon_probes: "reference/probes/probelocs_chm13.bed"
   sturgeon_model: "reference/models/general.zip"
@@ -26,48 +28,11 @@ timecourse:
   cleanup_bins: true
   cleanup_read_lists: true
 
+###########################################################
+#Only change sample info below
+###########################################################
 samples:
-  TVU19-3432:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/TVU19-3432/aligned_barcode06_26-TVU19-3432.bam"
-    sequencing_summary: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/sequencing_summary.txt"
-    barcode_label: "26-TVU19-3432"
-  TVU19-9860:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/TVU19-9860/aligned_barcode07_44-TVU19-9860.bam"
-    sequencing_summary: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/sequencing_summary.txt"
-    barcode_label: "44-TVU19-9860"
-  TVU19-15973:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/TVU19-15973/aligned_barcode08_57-TVU19-15973.bam"
-    sequencing_summary: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/sequencing_summary.txt"
-    barcode_label: "57-TVU19-15973"
-  TVU20-1255:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/TVU20-1255/aligned_barcode03_127-TVU20-1255.bam"
-    sequencing_summary: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/sequencing_summary.txt"
-    barcode_label: "127-TVU20-1255"
-  TVU20-3009:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/TVU20-3009/aligned_barcode05_129-TVU20-3009.bam"
-    sequencing_summary: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/sequencing_summary.txt"
-    barcode_label: "129-TVU20-3009"
-  TVU20-4014:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/TVU20-4014/aligned_barcode04_128-TVU20-4014.bam"
-    sequencing_summary: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/sequencing_summary.txt"
-    barcode_label: "128-TVU20-4014"
-  TVU20-15388:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/TVU20-15388/aligned_barcode01_69-TVU20-15388.bam"
-    sequencing_summary: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/sequencing_summary.txt"
-    barcode_label: "69-TVU20-15388"
-  TVU21-609:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/TVU21-609/aligned_barcode10_79-TVU21-609.bam"
-    sequencing_summary: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/sequencing_summary.txt"
-    barcode_label: "79-TVU21-609"
-  TVU21-4534:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/TVU21-4534/aligned_barcode09_77-TVU21-4534.bam"
-    sequencing_summary: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/sequencing_summary.txt"
-    barcode_label: "77-TVU21-4534"
-  TVU21-5500:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/TVU21-5500/aligned_barcode11_120-TVU21-5500.bam"
-    sequencing_summary: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/sequencing_summary.txt"
-    barcode_label: "120-TVU21-5500"
-  TVU22-1449:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/TVU22-1449/aligned_barcode02_126-TVU22-1449.bam"
-    sequencing_summary: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/sequencing_summary.txt"
-    barcode_label: "126-TVU22-1449"
+  test_data:
+    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/test_data/test_sample.bam"
+    sequencing_summary: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/test_data/sequencing_summary.txt"
+    barcode_label: "test_data"
