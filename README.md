@@ -41,22 +41,22 @@ snakemake --profile profile rule_timecourse
 
 ## ⬇️ Installation
 
-# If you haven't installed snakemake yet, this pipeline has been validated using version 9.8.1.
+### If you haven't installed snakemake yet, this pipeline has been validated using version 9.8.1.
 ```bash
 conda install -c conda-forge -c bioconda snakemake=9.8.1
 ```
-# As Helios uses SLURM as task manager, install the SLURM plugin
+### As Helios uses SLURM as task manager, install the SLURM plugin
 ```bash
 pip install snakemake-executor-plugin-slurm
 ```
-# Install singularity
+### Install singularity
 Helios has singularity installed as module (1.4.1-1.el9)
 
-# Install container from .def file
+### Install container from .def file
 ```bash
 apptainer build --fakeroot cns_AUMC_pipeline_v2.2.sif cns_AUMC_pipeline_v2.2.def
 ```
-# Downloading the classifiers (software is installed through the .def file, but models need to be downloaded manually)
+### Downloading the classifiers (software is installed through the .def file, but models need to be downloaded manually)
 Sturgeon V1: https://github.com/UMCUGenetics/sturgeon
 Sturgeon V2: Yet to be published
 
