@@ -44,7 +44,7 @@ In addition, the pipeline also offers an (optional) timecourse analysis next to 
 This feature can be run as follows:
 
 ```bash
-snakemake --profile profile rule_timecourse
+snakemake --profile profile all_timecourse
 ```
 
 ## ⬇️ Installation
