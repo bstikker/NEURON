@@ -1,4 +1,4 @@
-# 📦 NEURON
+# 🧠 NEURON
 
 ## 🌟 Highlights
 
@@ -33,12 +33,14 @@ samples:
     sequencing_summary: "NEURON/input/test_data/sequencing_summary.txt"
     barcode_label: "test_data"
 ```
+
 You can configure your SLURM settings in the profile/config.yaml file. In this way, you can run the pipeline as follows:
 
 ```bash
 snakemake --profile profile 
 ```
-In addition, the pipeline also offers a timecourse analysis. In your config/samples.yaml add the location of ONT's sequencing summary file as well as the name you gave your samples prior to the sequencing run.
+In addition, the pipeline also offers an (optional) timecourse analysis next to the regular pipeline. In your config/samples.yaml, add the location of ONT's sequencing summary file as well as the name you gave your samples prior to the sequencing run (barcode_label). This label should match exactly to the 'alias' column in the sequencing summary. Rename the sequencing summary file exactly to 'sequencing summary.txt'. Automated detection is in development.
+
 This feature can be run as follows:
 
 ```bash
