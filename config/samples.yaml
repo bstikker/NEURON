@@ -1,10 +1,12 @@
-container: "singularity/cns_AUMC_pipeline_v2.sif"
+container: "singularity/cns_AUMC_pipeline_v2.2.sif" # Specify container path relative to container
 
+#Configure default resources
 threads:
   sturgeon: 10
   qdnaseq_ace: 8
   pseudotime: 10
 
+#Do not change references or timecourse definitions!
 references:
   sturgeon_probes: "reference/probes/probelocs_chm13.bed"
   sturgeon_model: "reference/models/general.zip"
@@ -20,13 +22,17 @@ references:
   report_header: "scripts/logo.tex"
 
 timecourse:
-  bins: [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 360, 480]
-  cnv_bins: [30, 45, 60, 90, 120, 180, 240, 360, 480]
+  bins: [5, 10, 15, 20, 30, 45, 60, 90, 120, 180, 240, 360, 480, 720, 960, 1200, 
+      1440]
+  cnv_bins: [30, 45, 60, 90, 120, 180, 240, 360, 480, 720, 960, 1200, 1440]
   cleanup_bins: true
   cleanup_read_lists: true
 
+###########################################################
+#Only change sample info below
+###########################################################
 samples:
-  TVU19-13652:
-    bam: "input/TVU19-13652/aligned_barcode01_1-TVU19-13652-barcode01.bam"
-    sequencing_summary: "input/TVU19-13652/sequencing_summary.txt"
-    barcode_label: "1-TVU19-13652-barcode01"
+  test_data:
+    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/test_data/test_sample.bam"
+    sequencing_summary: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/test_data/sequencing_summary.txt"
+    barcode_label: "test_data"

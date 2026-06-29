@@ -2,22 +2,28 @@
 
 configfile: "config/samples.yaml"
 
+import os
+from datetime import datetime
+
 SAMPLES = list(config["samples"].keys())
-CONTAINER = config.get("container", "singularity/cns_AUMC_pipeline_v2.sif")
+CONTAINER = config.get("container", "singularity/cns_AUMC_pipeline_v2.2.sif")
 THREADS = config.get("threads", {})
 REFERENCES = config.get("references", {})
-
-import os
-
 TIMECONFIG = config.get("timecourse", {})
 TIMECourse_BINS = TIMECONFIG.get("bins", [15, 30, 45, 60, 90, 120, 180, 240, 360, 480])
 TIMECourse_CNV_BINS = TIMECONFIG.get("cnv_bins", TIMECourse_BINS)
 TIMECourse_CLEANUP = TIMECONFIG.get("cleanup_bins", False)
 TIMECourse_CLEANUP_READS = TIMECONFIG.get("cleanup_read_lists", False)
 
+wildcard_constraints:
+    sample=r"[^/]+",
+    timebin=r"\d+"
+
+
 def has_timecourse(sample):
     s = config["samples"][sample]
     return all(k in s for k in ["bam", "barcode_label", "sequencing_summary"])
+
 
 def estimate_mem_mb(wildcards):
     bam_path = config["samples"][wildcards.sample]["bam"]
@@ -25,7 +31,6 @@ def estimate_mem_mb(wildcards):
         return 32000
     size_gb = os.path.getsize(bam_path) / (1024**3)
 
-    # more conservative for large BAMs
     if size_gb < 15:
         mem_gb = 32
     elif size_gb < 30:
@@ -37,27 +42,32 @@ def estimate_mem_mb(wildcards):
 
     return mem_gb * 1024
 
+
 rule all:
     input:
         expand("results/{sample}/merged_probes_methyl_calls_general.csv", sample=SAMPLES),
+        expand("results/{sample}/sturgeon_v2_outcome.csv", sample=SAMPLES),
+        expand("results/{sample}/sturgeon_v2_outcome.png", sample=SAMPLES),
         expand("results/{sample}/QDNAseq_ACE/{sample}_CNV.png", sample=SAMPLES),
         expand("results/{sample}/QDNAseq_ACE/{sample}_CGHcall_segments.tsv", sample=SAMPLES),
         expand("results/{sample}/QDNAseq_ACE/ACE_summary.tsv", sample=SAMPLES),
         expand("results/{sample}/MGMT_analysis/mgmt_prediction.tsv", sample=SAMPLES),
         expand("results/{sample}/final_report.pdf", sample=SAMPLES)
 
+
 rule sturgeon:
     input:
-        bam=lambda wildcards: config["samples"][wildcards.sample]["bam"]
+        bam=lambda wc: config["samples"][wc.sample]["bam"]
     output:
         modkit_txt=temp("results/{sample}/modkit_extracted.txt"),
         sturgeon_csv="results/{sample}/merged_probes_methyl_calls_general.csv",
         adjusted_bam=temp("results/{sample}/adjusted_merged_sorted.bam"),
-        sturgeon_pdf="results/{sample}/merged_probes_methyl_calls_general.pdf"
+        sturgeon_pdf="results/{sample}/merged_probes_methyl_calls_general.pdf",
+        bed="results/{sample}/merged_probes_methyl_calls.bed"
     threads: THREADS.get("sturgeon", 10)
     resources:
-        mem_mb=estimate_mem_mb,  # dynamically estimate per sample
-        runtime=360  # keep 6h max
+        mem_mb=estimate_mem_mb,
+        runtime=360
     params:
         sample="{sample}"
     container:
@@ -66,6 +76,7 @@ rule sturgeon:
         """
         Rscript scripts/run_sturgeon.R {input.bam} {params.sample}
         """
+
 
 rule qdnaseq_ace:
     input:
@@ -89,10 +100,11 @@ rule qdnaseq_ace:
         Rscript scripts/run_qdnaseq_ace.R {params.sample} {input.bam}
         """
 
+
 rule qdnaseq_cghcall_annotate:
     input:
         rds="results/{sample}/QDNAseq_ACE/{sample}_copyNumbersSegmented.rds",
-        gene_bed="reference/genes/relevant_genes_with_chm13v2_500kb_bin_nrs_fusions_singlebin.bed"
+        gene_bed=REFERENCES.get("cnv_gene_bed", "reference/genes/relevant_genes_with_chm13v2_500kb_bin_nrs_fusions_singlebin.bed")
     output:
         cnv="results/{sample}/QDNAseq_ACE/{sample}_CNV.png",
         segments="results/{sample}/QDNAseq_ACE/{sample}_CGHcall_segments.tsv",
@@ -113,6 +125,7 @@ rule qdnaseq_cghcall_annotate:
             FALSE
         """
 
+
 rule mgmt_predict_promoter:
     input:
         modkit="results/{sample}/modkit_extracted.txt",
@@ -126,7 +139,37 @@ rule mgmt_predict_promoter:
         CONTAINER
     shell:
         """
-        Rscript scripts/mgmt_analysis.R             --modkit {input.modkit}             --model {input.model}             --bed {input.bed}             --out {output.result}             --verbose
+        Rscript scripts/mgmt_analysis.R \
+            --modkit {input.modkit} \
+            --model {input.model} \
+            --bed {input.bed} \
+            --out {output.result} \
+            --verbose
+        """
+
+rule sturgeon_v2:
+    input:
+        bed="results/{sample}/merged_probes_methyl_calls.bed",
+        model="reference/models/cns-v2.zip"
+    output:
+        csv="results/{sample}/sturgeon_v2_outcome.csv",
+        png="results/{sample}/sturgeon_v2_outcome.png"
+    params:
+        rscript="scripts/plot_sturgeon_v2.R"
+    container:
+        CONTAINER
+    shell:
+        """
+        sturgeon-v2 \
+            -i {input.bed} \
+            -m {input.model} \
+            -o {output.csv} \
+            -f bed
+
+        Rscript {params.rscript} \
+            {output.csv} \
+            {wildcards.sample} \
+            {output.png}
         """
 
 rule report:
@@ -135,33 +178,74 @@ rule report:
         mgmt="results/{sample}/MGMT_analysis/mgmt_prediction.tsv",
         cnv="results/{sample}/QDNAseq_ACE/{sample}_CNV.png",
         ace="results/{sample}/QDNAseq_ACE/ACE_summary.tsv",
-        rmd="scripts/report.Rmd"        
+        sturgeon_v2_png="results/{sample}/sturgeon_v2_outcome.png",
+        rmd="scripts/report.Rmd"
     output:
         pdf="results/{sample}/final_report.pdf"
     params:
-        outdir=lambda wildcards: f"results/{wildcards.sample}",
-        sample="{sample}"
+        sample="{sample}",
+        version="v1.0.0",
+        rundate=lambda wc: datetime.today().strftime("%Y-%m-%d")
     container:
         CONTAINER
     shell:
         r"""
-        Rscript -e "rmarkdown::render(\
-          input = 'scripts/report.Rmd', \
-          params = list(sample = '{wildcards.sample}'), \
-          output_dir = normalizePath('results/{wildcards.sample}', mustWork = TRUE), \
-          output_file = 'final_report.pdf', \
-          knit_root_dir = normalizePath('.', mustWork = TRUE) \
-        )"
-        """
+        set -euo pipefail
 
-rule all_timecourse:
-    input:
-        expand("results/{sample}/{sample}_timecourse_report.pdf",
-               sample=[s for s in SAMPLES if has_timecourse(s)]),
-        expand("results/{sample}/{sample}_timecourse_summary.tsv",
-               sample=[s for s in SAMPLES if has_timecourse(s)]),
-        expand("read_lists/{sample}/{sample}_read_counts.tsv",
-               sample=[s for s in SAMPLES if has_timecourse(s)]),
+        SAMPLE="{wildcards.sample}"
+        OUTDIR="$(pwd)/results/{wildcards.sample}"
+        TMP_RENDER_DIR="$(mktemp -d "${{TMPDIR:-/tmp}}/${{SAMPLE}}_report_XXXXXX")"
+
+        cleanup() {{
+            rm -rf "$TMP_RENDER_DIR"
+        }}
+        trap cleanup EXIT
+
+        mkdir -p "$OUTDIR"
+
+        # Remove any old final output in the sample folder
+        rm -f "$OUTDIR/final_report.pdf"
+
+        # Render into a unique temp directory for this run only
+        set +e
+        Rscript -e "rmarkdown::render(
+            input = '{input.rmd}',
+            params = list(
+                sample = '{wildcards.sample}',
+                version = '{params.version}',
+                rundate = '{params.rundate}'
+            ),
+            output_dir = normalizePath('$TMP_RENDER_DIR', mustWork = TRUE),
+            intermediates_dir = normalizePath('$TMP_RENDER_DIR', mustWork = TRUE),
+            output_file = 'final_report.pdf',
+            knit_root_dir = normalizePath('.', mustWork = TRUE)
+        )"
+        RSTATUS=$?
+        set -e
+
+        if [[ $RSTATUS -ne 0 ]]; then
+            echo "rmarkdown::render() failed; attempting fallback compile from TeX generated in this run."
+
+            if [[ -f "$TMP_RENDER_DIR/final_report.tex" ]]; then
+                (
+                    cd "$TMP_RENDER_DIR"
+                    xelatex -interaction=nonstopmode -halt-on-error final_report.tex
+                    xelatex -interaction=nonstopmode -halt-on-error final_report.tex
+                )
+            else
+                echo "No final_report.tex generated in current run; refusing to compile stale TeX."
+                exit 1
+            fi
+        fi
+
+        test -f "$TMP_RENDER_DIR/final_report.pdf"
+        mv "$TMP_RENDER_DIR/final_report.pdf" "$OUTDIR/final_report.pdf"
+        test -f "$OUTDIR/final_report.pdf"
+        """
+#---------------------
+# Timecourse analysis
+#---------------------
+
 
 rule subset_bam_for_cnv_timepoint:
     input:
@@ -183,13 +267,14 @@ rule subset_bam_for_cnv_timepoint:
         samtools index -@ {threads} {output.bam}
         """
 
+
 rule qdnaseq_ace_timecourse:
     input:
         bam="results/{sample}/{sample}_{timebin}min/subset_for_cnv.bam",
         bai="results/{sample}/{sample}_{timebin}min/subset_for_cnv.bam.bai",
         ace_script="scripts/run_qdnaseq_ace.R",
         cgh_script="scripts/qdnaseq_cghcall_annotate.R",
-        gene_bed="reference/genes/relevant_genes_with_chm13v2_500kb_bin_nrs_fusions_singlebin.bed"
+        gene_bed=REFERENCES.get("cnv_gene_bed", "reference/genes/relevant_genes_with_chm13v2_500kb_bin_nrs_fusions_singlebin.bed")
     output:
         bed="results/{sample}/{sample}_{timebin}min/QDNAseq_ACE/{sample}_{timebin}min_500kbp.bed",
         seg="results/{sample}/{sample}_{timebin}min/QDNAseq_ACE/{sample}_{timebin}min_500kbp.seg",
@@ -226,65 +311,113 @@ rule qdnaseq_ace_timecourse:
             FALSE
         """
 
-rule sturgeon_timecourse:
+SAMPLES = config["samples"].keys()
+TIME_BINS = config["timecourse"]["bins"]
+
+rule generate_read_lists:
     input:
-        bam=lambda wc: config["samples"][wc.sample]["bam"],
-        summary=lambda wc: config["samples"][wc.sample]["sequencing_summary"],
-        script_py="scripts/generate_reads_lists.py",
-        script_sh="scripts/subset_bam_and_run_sturgeon.sh",
-        script_r="scripts/aggregate_sturgeon_timecourse_line_top10.R",
-        probes="reference/probes/probelocs_chm13.bed",
-        model="reference/models/general.zip",
-        cnv_pngs=expand(
-            "results/{sample}/{sample}_{timebin}min/QDNAseq_ACE/{sample}_{timebin}min_CNV.png",
-            sample=lambda wc: wc.sample,
-            timebin=TIMECourse_CNV_BINS
-        )
+        summary=lambda wc: config["samples"][wc.sample]["sequencing_summary"]
     output:
-        pdf="results/{sample}/{sample}_timecourse_report.pdf",
-        tsv="results/{sample}/{sample}_timecourse_summary.tsv",
-        read_counts="read_lists/{sample}/{sample}_read_counts.tsv"
+        read_counts="read_lists/{sample}/{sample}_read_counts.tsv",
+        read_ids=expand(
+            "read_lists/{{sample}}/{{sample}}_read_ids_{timebin}min.txt",
+            timebin=config["timecourse"]["bins"]
+        )
     params:
+        script="scripts/generate_reads_lists.py",
         barcode_label=lambda wc: config["samples"][wc.sample]["barcode_label"],
-        bins=lambda wc: " ".join(map(str, TIMECourse_BINS)),
-        project_root=lambda wc: workflow.basedir,
-        cleanup_bins=lambda wc: "true" if TIMECourse_CLEANUP else "false"
-    threads: THREADS.get("sturgeon", 10)
-    resources:
-        mem_mb=estimate_mem_mb,
-        runtime=720
+        bins=lambda wc: " ".join(str(x) for x in config["timecourse"]["bins"])
     container:
         CONTAINER
     shell:
         r"""
-        mkdir -p read_lists/{wildcards.sample} results/{wildcards.sample} tmp
-
-        python3 {input.script_py} \
-            --summary {input.summary} \
-            --sample {wildcards.sample} \
-            --barcode-label "{params.barcode_label}" \
-            --output read_lists/{wildcards.sample} \
-            --bins {params.bins}
-
-        for BIN in {params.bins}; do
-            READ_LIST="read_lists/{wildcards.sample}/{wildcards.sample}_read_ids_${{BIN}}min.txt"
-            if [[ -s "${{READ_LIST}}" ]]; then
-                bash {input.script_sh} \
-                    "{input.bam}" \
-                    "${{READ_LIST}}" \
-                    "{wildcards.sample}" \
-                    "${{BIN}}" \
-                    "{params.project_root}"
-            fi
-        done
-
-        Rscript {input.script_r} \
-            results/{wildcards.sample} \
-            {output.pdf} \
-            {output.tsv} \
-            {output.read_counts}
-
-        if [[ "{params.cleanup_bins}" == "true" ]]; then
-            find results/{wildcards.sample} -maxdepth 1 -type d -name "{wildcards.sample}_*min" -exec rm -rf {{}} +
-        fi
+        mkdir -p read_lists/{wildcards.sample}
+        python {params.script} \
+          --summary {input.summary} \
+          --sample {wildcards.sample} \
+          --barcode-label "{params.barcode_label}" \
+          --output read_lists/{wildcards.sample} \
+          --bins {params.bins}
         """
+
+rule subset_and_run_sturgeon_timecourse:
+    input:
+        bam=lambda wc: config["samples"][wc.sample]["bam"],
+        read_list="read_lists/{sample}/{sample}_read_ids_{timebin}min.txt",
+        probes=REFERENCES.get("sturgeon_probes", "reference/probes/probelocs_chm13.bed"),
+        model=REFERENCES.get("sturgeon_model", "reference/models/general.zip")
+    output:
+        bed="results/{sample}/{sample}_{timebin}min/merged_probes_methyl_calls.bed",
+        csv="results/{sample}/{sample}_{timebin}min/merged_probes_methyl_calls_general.csv",
+        pdf="results/{sample}/{sample}_{timebin}min/merged_probes_methyl_calls_general.pdf"
+    threads: THREADS.get("sturgeon", 10)
+    resources:
+        mem_mb=estimate_mem_mb,
+        runtime=360
+    container:
+        CONTAINER
+    shell:
+        """
+        mkdir -p results/{wildcards.sample}/{wildcards.sample}_{wildcards.timebin}min
+        bash scripts/subset_bam_and_run_sturgeon.sh \
+            {input.bam} \
+            {input.read_list} \
+            {wildcards.sample} \
+            {wildcards.timebin} \
+            .
+        """
+
+rule sturgeon_v2_timecourse:
+    input:
+        bed="results/{sample}/{sample}_{timebin}min/merged_probes_methyl_calls.bed",
+        model="reference/models/cns-v2.zip"
+    output:
+        csv="results/{sample}/{sample}_{timebin}min/sturgeon_v2_outcome.csv"
+    container:
+        CONTAINER
+    shell:
+        """
+        sturgeon-v2 \
+            -i {input.bed} \
+            -m {input.model} \
+            -o {output.csv} \
+            -f bed
+        """
+
+rule timecourse_rmd:
+    input:
+        sturgeon_v1_csvs=expand(
+            "results/{{sample}}/{{sample}}_{timebin}min/merged_probes_methyl_calls_general.csv",
+            timebin=TIME_BINS
+        ),
+        sturgeon_v2_csvs=expand(
+            "results/{{sample}}/{{sample}}_{timebin}min/sturgeon_v2_outcome.csv",
+            timebin=TIME_BINS
+        ),
+        cnv_pngs=expand(
+            "results/{{sample}}/{{sample}}_{timebin}min/QDNAseq_ACE/{{sample}}_{timebin}min_CNV.png",
+            timebin=TIME_BINS
+        ),
+        read_counts="read_lists/{sample}/{sample}_read_counts.tsv"
+    output:
+        pdf="results/{sample}/{sample}_timecourse.pdf"
+    params:
+        sample_id="{sample}"
+    container:
+        CONTAINER
+    shell:
+        r"""
+        Rscript -e "rmarkdown::render(
+            input = 'scripts/timecourse_report.Rmd',
+            params = list(
+                sample_id = '{wildcards.sample}'
+            ),
+            output_dir = normalizePath('results/{wildcards.sample}', mustWork = TRUE),
+            output_file = '{wildcards.sample}_timecourse.pdf',
+            knit_root_dir = normalizePath('.', mustWork = TRUE)
+        )"
+        """
+
+rule all_timecourse:
+    input:
+        pdfs=expand("results/{sample}/{sample}_timecourse.pdf", sample=SAMPLES)

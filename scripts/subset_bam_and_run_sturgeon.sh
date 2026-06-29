@@ -5,7 +5,7 @@ FULL_BAM="${1:?Missing full BAM}"
 READ_LIST="${2:?Missing read list}"
 SAMPLE_ID="${3:?Missing sample ID}"
 TIME_BIN="${4:?Missing time bin}"
-PROJECT_ROOT="${5:?Missing project root}"
+PROJECT_ROOT="${5:-.}"
 
 THREADS="${THREADS:-10}"
 
@@ -64,7 +64,7 @@ sturgeon predict \
   -o "${STURGEON_OUT}" \
   -m "${MODEL_FILE}"
 
-for f in merged_probes_methyl_calls_general.csv merged_probes_methyl_calls_general.pdf; do
+for f in merged_probes_methyl_calls_general.csv merged_probes_methyl_calls_general.pdf merged_probes_methyl_calls.bed; do
   if [[ -f "${STURGEON_OUT}/${f}" ]]; then
     cp -f "${STURGEON_OUT}/${f}" "${FINAL_DIR}/"
   fi

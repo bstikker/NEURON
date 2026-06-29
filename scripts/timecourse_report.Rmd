@@ -1,0 +1,325 @@
+---
+title: "`r params$sample_id` Timecourse Report"
+output:
+  pdf_document:
+    latex_engine: xelatex
+params:
+  sample_id: "TVU19-13652"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+
+suppressPackageStartupMessages({
+  library(ggplot2)
+  library(dplyr)
+  library(tidyr)
+  library(readr)
+  library(knitr)
+  library(scales)
+  library(stringr)
+})
+
+sample_id  <- params$sample_id
+sample_dir <- normalizePath(file.path("results", sample_id), winslash = "/", mustWork = TRUE)
+read_counts_tsv <- file.path("read_lists", sample_id, paste0(sample_id, "_read_counts.tsv"))
+
+safe_read_tsv <- function(f) {
+  tryCatch(read.delim(f, stringsAsFactors = FALSE, check.names = FALSE), error = function(e) NULL)
+}
+
+infer_time_from_path <- function(path, sample_id) {
+  m <- regexpr(paste0(sample_id, "_([0-9]+)min"), path, perl = TRUE)
+  if (m[1] == -1) return(NA_real_)
+  hit <- regmatches(path, m)[1]
+  as.numeric(sub(paste0(sample_id, "_([0-9]+)min"), "\\1", hit, perl = TRUE))
+}
+
+canonicalize_class <- function(x) {
+  dplyr::case_when(
+    x %in% c("A_IDH_HG", "Glioma IDH - A IDH - HG") ~ "Glioma IDH - A IDH - HG",
+    x %in% c("O_IDH", "Glioma IDH - O IDH - O IDH") ~ "Glioma IDH - O IDH - O IDH",
+    x %in% c("GBM_RTK1", "Glioblastoma - GBM - RTK I") ~ "Glioblastoma - GBM - RTK I",
+    x %in% c("GBM_RTK2", "Glioblastoma - GBM - RTK II") ~ "Glioblastoma - GBM - RTK II",
+    x %in% c("DMG_K27", "Glioblastoma - DMG - K27") ~ "Glioblastoma - DMG - K27",
+    TRUE ~ x
+  )
+}
+
+parse_sturgeon_csv <- function(f, sample_id) {
+  df <- tryCatch(read.csv(f, stringsAsFactors = FALSE, check.names = FALSE), error = function(e) NULL)
+  if (is.null(df) || nrow(df) == 0) return(NULL)
+  if (!("number_probes" %in% colnames(df))) return(NULL)
+
+  time_min <- infer_time_from_path(f, sample_id)
+  if (is.na(time_min)) return(NULL)
+
+  class_cols <- setdiff(colnames(df), "number_probes")
+  if (length(class_cols) == 0) return(NULL)
+
+  scores <- suppressWarnings(as.numeric(df[1, class_cols]))
+  data.frame(
+    classifier = "Sturgeon",
+    time_min = time_min,
+    predicted_class = class_cols,
+    display_class = canonicalize_class(class_cols),
+    confidence = scores,
+    cpg_used = suppressWarnings(as.numeric(df$number_probes[1])),
+    source_csv = basename(f),
+    stringsAsFactors = FALSE
+  )
+}
+
+parse_sturgeon_v2_csv <- function(f, sample_id) {
+  df <- tryCatch(read.csv(f, stringsAsFactors = FALSE, check.names = FALSE), error = function(e) NULL)
+  if (is.null(df) || nrow(df) == 0) return(NULL)
+
+  time_min <- infer_time_from_path(f, sample_id)
+  if (is.na(time_min)) return(NULL)
+
+  cn <- colnames(df)
+  lower_cn <- tolower(cn)
+
+  probe_idx <- which(lower_cn %in% c("probes", "number_probes", "cpg_used", "cpg_probes"))
+  probe_val <- NA_real_
+  if (length(probe_idx) > 0) {
+    probe_val <- suppressWarnings(as.numeric(df[1, probe_idx[1]]))
+  }
+
+  drop_cols <- unique(c(
+    probe_idx,
+    which(lower_cn %in% c("sample", "sample_id", "id", "barcode", "source_csv", "time_min"))
+  ))
+  class_idx <- setdiff(seq_along(cn), drop_cols)
+  if (length(class_idx) == 0) return(NULL)
+
+  scores <- suppressWarnings(as.numeric(df[1, class_idx]))
+  keep <- !is.na(scores)
+  if (!any(keep)) return(NULL)
+
+  pred <- cn[class_idx][keep]
+  data.frame(
+    classifier = "Sturgeon v2",
+    time_min = time_min,
+    predicted_class = pred,
+    display_class = canonicalize_class(pred),
+    confidence = scores[keep],
+    cpg_used = probe_val,
+    source_csv = basename(f),
+    stringsAsFactors = FALSE
+  )
+}
+
+sturgeon_files <- list.files(sample_dir, pattern = "merged_probes_methyl_calls_general.csv$", recursive = TRUE, full.names = TRUE)
+v2_files       <- list.files(sample_dir, pattern = "sturgeon_v2_outcome.csv$", recursive = TRUE, full.names = TRUE)
+cnv_files <- list.files(
+  sample_dir,
+  recursive = TRUE,
+  full.names = TRUE
+) %>%
+  .[grepl("/QDNAseq_ACE/.*_CNV\\.png$", ., perl = TRUE)]
+
+cnv_df <- data.frame(
+  cnv_png = cnv_files,
+  time_min = sapply(cnv_files, infer_time_from_path, sample_id = sample_id),
+  stringsAsFactors = FALSE
+) %>%
+  dplyr::filter(!is.na(time_min), file.exists(cnv_png)) %>%
+  dplyr::arrange(time_min)
+
+message("Found ", length(cnv_files), " CNV PNG files")
+if (length(cnv_files) > 0) {
+  message(paste(cnv_files, collapse = "\n"))
+}
+
+sturgeon_df <- bind_rows(Filter(Negate(is.null), lapply(sturgeon_files, parse_sturgeon_csv, sample_id = sample_id)))
+v2_df       <- bind_rows(Filter(Negate(is.null), lapply(v2_files, parse_sturgeon_v2_csv, sample_id = sample_id)))
+
+all_df <- bind_rows(sturgeon_df, v2_df) %>%
+  mutate(
+    time_min = as.numeric(time_min),
+    confidence = as.numeric(confidence),
+    predicted_class = as.character(predicted_class),
+    display_class = as.character(display_class),
+    cpg_used = as.numeric(cpg_used)
+  ) %>%
+  filter(!is.na(time_min), !is.na(confidence))
+
+if (nrow(all_df) == 0) {
+  stop("No valid Sturgeon/Sturgeon v2 timecourse rows found under: ", sample_dir)
+}
+
+palette_keys <- sort(unique(all_df$display_class))
+
+fixed_palette <- setNames(
+  scales::hue_pal(l = 55, c = 150)(length(palette_keys)),
+  palette_keys
+)
+
+reads_df <- NULL
+if (file.exists(read_counts_tsv)) {
+  reads_df <- safe_read_tsv(read_counts_tsv)
+}
+
+if (!is.null(reads_df) && all(c("time_min", "estimated_reads") %in% colnames(reads_df))) {
+  reads_df <- reads_df %>%
+    mutate(time_min = as.numeric(time_min), estimated_reads = as.numeric(estimated_reads)) %>%
+    select(time_min, estimated_reads) %>%
+    distinct() %>%
+    arrange(time_min)
+} else {
+  reads_df <- data.frame(time_min = sort(unique(all_df$time_min)), estimated_reads = NA_real_)
+}
+
+summary_table <- all_df %>%
+  group_by(classifier, time_min) %>%
+  slice_max(order_by = confidence, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  left_join(reads_df, by = "time_min") %>%
+  select(classifier, time_min, estimated_reads, confidence, predicted_class, display_class, cpg_used, source_csv)
+
+summary_tsv_out <- file.path(sample_dir, paste0(sample_id, "_timecourse_summary.tsv"))
+write.table(
+  summary_table,
+  file = summary_tsv_out,
+  sep = "\t",
+  quote = FALSE,
+  row.names = FALSE
+)
+
+plot_classifier <- function(df, title_text, ylab_text) {
+  if (nrow(df) == 0) return(NULL)
+
+  top_classes <- df %>%
+    group_by(display_class) %>%
+    summarise(mean_conf = mean(confidence, na.rm = TRUE), .groups = "drop") %>%
+    arrange(desc(mean_conf)) %>%
+    slice_head(n = 10) %>%
+    pull(display_class)
+
+  plot_df <- df %>%
+    filter(display_class %in% top_classes) %>%
+    left_join(reads_df, by = "time_min") %>%
+    arrange(time_min)
+
+  read_label_df <- plot_df %>%
+    distinct(time_min, estimated_reads) %>%
+    arrange(time_min)
+
+  p <- ggplot(plot_df, aes(x = time_min, y = confidence, color = display_class, group = display_class)) +
+    geom_line(linewidth = 1) +
+    geom_point(size = 1.2) +
+    geom_hline(yintercept = 0.80, linetype = "dotted", color = "goldenrod2") +
+    geom_hline(yintercept = 0.95, linetype = "dotted", color = "red") +
+    theme_minimal(base_size = 11) +
+    labs(
+      title = paste0(sample_id, ": ", title_text),
+      x = "Time (min)",
+      y = ylab_text,
+      color = "Tumor class"
+    ) +
+    scale_y_continuous(limits = c(0, 1.1)) +
+    scale_color_manual(values = fixed_palette[top_classes], breaks = top_classes) +
+    theme(
+      plot.title = element_text(face = "bold"),
+      legend.position = "right"
+    )
+
+  if (nrow(read_label_df) > 0 && any(!is.na(read_label_df$estimated_reads))) {
+    p <- p +
+      geom_text(
+        data = read_label_df,
+        aes(x = time_min, y = 1.02, label = scales::comma(round(estimated_reads))),
+        inherit.aes = FALSE,
+        size = 3,
+        angle = 45,
+        hjust = 0,
+        vjust = 0
+      ) +
+      annotate(
+        "text",
+        x = min(read_label_df$time_min, na.rm = TRUE),
+        y = 1.08,
+        label = "Cumulative reads",
+        hjust = 0,
+        size = 3.5,
+        fontface = "bold"
+      )
+  }
+
+  p
+}
+
+```
+
+# Sturgeon v1 timecourse
+
+```{r sturgeon-v1-timecourse, fig.width=10, fig.height=7, out.width='95%', fig.align='center'}
+p1 <- plot_classifier(
+  dplyr::filter(all_df, classifier == "Sturgeon"),
+  "Sturgeon confidence over time",
+  "Sturgeon confidence"
+)
+
+if (!is.null(p1)) {
+  print(p1)
+} else {
+  cat("No Sturgeon v1 timecourse data found.")
+}
+```
+
+\newpage
+# Sturgeon v2 timecourse
+
+```{r sturgeon-v2-timecourse, fig.width=10, fig.height=7, out.width='95%', fig.align='center'}
+p2 <- plot_classifier(
+  dplyr::filter(all_df, classifier == "Sturgeon v2"),
+  "Sturgeon v2 confidence over time",
+  "Sturgeon v2 confidence"
+)
+
+if (!is.null(p2)) {
+  print(p2)
+} else {
+  cat("No Sturgeon v2 timecourse data found.")
+}
+```
+
+\newpage
+
+# CNV profiles over time
+
+```{r cnv-images, results='asis', echo=FALSE, warning=FALSE, message=FALSE}
+cat("\\newpage\n")
+cat("# CNV profiles\n\n")
+
+if (nrow(cnv_df) == 0) {
+  cat("No CNV profile PNGs were found.\n")
+} else {
+  for (i in seq_len(nrow(cnv_df))) {
+    f <- normalizePath(cnv_df$cnv_png[i], winslash = "/", mustWork = TRUE)
+    t <- cnv_df$time_min[i]
+
+    message("Including CNV PNG: ", f)
+
+    cat(sprintf("## %s min\n\n", t))
+    cat("\\begin{center}\n")
+    cat(sprintf(
+      "\\includegraphics[width=0.95\\linewidth]{\\detokenize{%s}}\n",
+      f
+    ))
+    cat("\\end{center}\n\n")
+
+    if (i < nrow(cnv_df)) {
+      cat("\\newpage\n")
+    }
+  }
+}
+
+# Report metadata
+
+```{r metadata}
+cat("Report generated on:", Sys.Date(), "\n")
+cat("User:", Sys.info()[['user']], "\n")
+cat("Sample directory:", normalizePath(sample_dir, mustWork = FALSE), "\n")
+```

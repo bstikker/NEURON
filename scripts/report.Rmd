@@ -1,12 +1,15 @@
 ---
-title: "Molecular Diagnostics CNS Tumor Report"
-author: "Dr. Bernard Stikker"
+title: "Sturgeon/nanopore molecular report"
+subtitle: "Pipeline version: `r params$version` | Run date: `r params$rundate` | Sample ID: `r params$sample`"
 output:
   pdf_document:
     latex_engine: xelatex
+    keep_tex: true
 params:
   sample: "SAMPLE_NAME"
-knit_root_dir: '.'
+  version: "VERSION_PLACEHOLDER"
+  rundate: "RUN_DATE_PLACEHOLDER"
+  knit_root_dir: '.'
 ---
 
 ```{r setup, include=FALSE}
@@ -27,6 +30,18 @@ if (file.exists(sturgeon_plot_path)) {
 }
 ```
 
+# Sturgeon V2 classification
+```{r sturgeon_v2_plot, out.width='100%', fig.align='center'}
+sturgeon_v2_plot_path <- file.path("results", params$sample, "sturgeon_v2_outcome.png")
+
+if (file.exists(sturgeon_v2_plot_path)) {
+  knitr::include_graphics(normalizePath(sturgeon_v2_plot_path, mustWork = TRUE), rel_path = FALSE)
+} else {
+  cat("Sturgeon v2 classification plot not found.")
+}
+```
+
+\newpage
 # MGMT Promoter Methylation
 ```{r MGMT}
 mgmt_path <- file.path("results", params$sample, "MGMT_analysis", "mgmt_prediction.tsv")
@@ -38,8 +53,9 @@ if (file.exists(mgmt_path)) {
 }
 ```
 
+\newpage
 # CNV Profile
-```{r CNV}
+```{r CNV, out.width='90%', fig.align='center'}
 cnv_path <- file.path("results", params$sample, "QDNAseq_ACE", paste0(params$sample, "_CNV.png"))
 if (file.exists(cnv_path)) {
   knitr::include_graphics(normalizePath(cnv_path, mustWork = TRUE), rel_path = FALSE)

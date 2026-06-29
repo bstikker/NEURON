@@ -5,7 +5,7 @@ default-resources:
   - cpus=4
   - partition=defq
   - account=tgac
-jobs: 10
+jobs: 20
 jobname: "{rulename}.{jobid}"
 latency-wait: 60
 use-conda: false
