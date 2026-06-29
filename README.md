@@ -5,7 +5,7 @@
 - Nanopore methylation-based brain tumor diagnosis (Sturgeon)
 - Copy Number Profiles (QDNAseq)
 - Estimated tumor purity (ACE)
-- MGMT promoter methylation status (Rapid-CNS^2)
+- _MGMT_ promoter methylation status (Rapid-CNS2)
 
 
 ## ℹ️ Overview
@@ -64,11 +64,15 @@ Helios has singularity installed as module (1.4.1-1.el9)
 ```bash
 apptainer build --fakeroot cns_AUMC_pipeline_v2.2.sif cns_AUMC_pipeline_v2.2.def
 ```
+### Reference genome
+The pipeline uses the T2T-CHM13v2.0 reference genome. Please download the FASTA file here: https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/chm13v2.0.fa.gz
+Move the gzipped FASTA into NEURON/references/genome/ folder
+
 ### Downloading the classifiers (software is installed through the .def file, but models need to be downloaded manually)
 Sturgeon V1: https://github.com/UMCUGenetics/sturgeon
 Sturgeon V2: Yet to be published
 
-Move the model zip files to references/models/
+Move the model zip files to NEURON/reference/models/
 
 ### Test the pipeline
 A small testset has been added to the input folder to test correct installation of the workflow. It does not yield biologically meaningful outcomes, but is only to be used to test the workflow.
