@@ -3,6 +3,7 @@
 configfile: "config/samples.yaml"
 
 import os
+import sys
 from datetime import datetime
 
 SAMPLES = list(config["samples"].keys())
@@ -314,8 +315,24 @@ rule qdnaseq_ace_timecourse:
             FALSE
         """
 
-SAMPLES = config["samples"].keys()
+TIMECOURSE_SAMPLES = [s for s in SAMPLES if has_timecourse(s)]
 TIME_BINS = config["timecourse"]["bins"]
+
+
+def timecourse_pdfs(wildcards):
+    if not TIMECOURSE_SAMPLES:
+        raise ValueError(
+            "No samples are configured for the timecourse analysis. Add 'sequencing_summary' "
+            "and 'barcode_label' to at least one sample in config/samples.yaml."
+        )
+    skipped = [s for s in SAMPLES if s not in TIMECOURSE_SAMPLES]
+    if skipped:
+        print(
+            "Skipping timecourse for samples without 'sequencing_summary'/'barcode_label': "
+            + ", ".join(skipped),
+            file=sys.stderr
+        )
+    return expand("results/{sample}/{sample}_timecourse.pdf", sample=TIMECOURSE_SAMPLES)
 
 rule generate_read_lists:
     input:
@@ -424,4 +441,4 @@ rule timecourse_rmd:
 
 rule all_timecourse:
     input:
-        pdfs=expand("results/{sample}/{sample}_timecourse.pdf", sample=SAMPLES)
+        pdfs=timecourse_pdfs
