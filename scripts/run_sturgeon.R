@@ -1,5 +1,5 @@
 # run_sturgeon.R (enhanced)
-# Usage: Rscript run_sturgeon.R <bam_path> <sample_id>
+# Usage: Rscript run_sturgeon.R <bam_path> <sample_id> [model_zip]
 
 args <- commandArgs(trailingOnly = TRUE)
 script_arg <- grep("^--file=", commandArgs(), value = TRUE)
@@ -7,11 +7,12 @@ script_path <- normalizePath(sub("^--file=", "", script_arg[1]), mustWork = TRUE
 repo_root <- normalizePath(file.path(dirname(script_path), ".."), mustWork = TRUE)
 
 if (length(args) < 2) {
-  stop("Usage: Rscript run_sturgeon.R <bam_path> <sample_id>")
+  stop("Usage: Rscript run_sturgeon.R <bam_path> <sample_id> [model_zip]")
 }
 
 bam_file <- normalizePath(args[1], mustWork = TRUE)
 sample_id <- args[2]
+model_file <- if (length(args) >= 3) normalizePath(args[3], mustWork = TRUE) else file.path(repo_root, "reference", "models", "general.zip")
 
 cat(sprintf("Running Sturgeon pipeline for sample: %s\n", sample_id))
 
@@ -64,7 +65,7 @@ if (status != 0) stop("modkit extract failed.")
 # ---------------------------
 # Step 3: Run Sturgeon prediction
 # ---------------------------
-cmd_sturgeon <- sprintf("%s %s", shQuote(sturgeon_shell), shQuote(output_dir))
+cmd_sturgeon <- sprintf("%s %s %s", shQuote(sturgeon_shell), shQuote(output_dir), shQuote(model_file))
 cat(sprintf("Running: %s\n", cmd_sturgeon))
 status <- system(cmd_sturgeon)
 if (status != 0) stop("Sturgeon prediction shell script failed.")

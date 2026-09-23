@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 1 ]]; then
-  echo "Usage: $0 <sturgeon_output_dir>" >&2
+if [[ $# -lt 1 || $# -gt 2 ]]; then
+  echo "Usage: $0 <sturgeon_output_dir> [model_zip]" >&2
   exit 1
 fi
 
@@ -10,7 +10,7 @@ OUTPUT_DIR="$1"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 PROBES_FILE="${REPO_ROOT}/reference/probes/probelocs_chm13.bed"
-MODEL_FILE="${REPO_ROOT}/reference/models/general.zip"
+MODEL_FILE="${2:-${REPO_ROOT}/reference/models/general.zip}"
 
 if [[ ! -d "${OUTPUT_DIR}" ]]; then
   echo "Output directory not found: ${OUTPUT_DIR}" >&2

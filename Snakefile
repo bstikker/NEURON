@@ -10,6 +10,8 @@ CONTAINER = config.get("container", "singularity/cns_AUMC_pipeline_v2.2.sif")
 THREADS = config.get("threads", {})
 REFERENCES = config.get("references", {})
 TIMECONFIG = config.get("timecourse", {})
+STURGEON_MODEL = REFERENCES.get("sturgeon_model", "reference/models/general.zip")
+STURGEON_V2_MODEL = REFERENCES.get("sturgeon_v2_model", "reference/models/cns-v2.zip")
 TIMECourse_BINS = TIMECONFIG.get("bins", [15, 30, 45, 60, 90, 120, 180, 240, 360, 480])
 TIMECourse_CNV_BINS = TIMECONFIG.get("cnv_bins", TIMECourse_BINS)
 TIMECourse_CLEANUP = TIMECONFIG.get("cleanup_bins", False)
@@ -57,7 +59,8 @@ rule all:
 
 rule sturgeon:
     input:
-        bam=lambda wc: config["samples"][wc.sample]["bam"]
+        bam=lambda wc: config["samples"][wc.sample]["bam"],
+        model=STURGEON_MODEL
     output:
         modkit_txt=temp("results/{sample}/modkit_extracted.txt"),
         sturgeon_csv="results/{sample}/merged_probes_methyl_calls_general.csv",
@@ -74,7 +77,7 @@ rule sturgeon:
         CONTAINER
     shell:
         """
-        Rscript scripts/run_sturgeon.R {input.bam} {params.sample}
+        Rscript scripts/run_sturgeon.R {input.bam} {params.sample} {input.model}
         """
 
 
@@ -150,7 +153,7 @@ rule mgmt_predict_promoter:
 rule sturgeon_v2:
     input:
         bed="results/{sample}/merged_probes_methyl_calls.bed",
-        model="reference/models/cns-v2.zip"
+        model=STURGEON_V2_MODEL
     output:
         csv="results/{sample}/sturgeon_v2_outcome.csv",
         png="results/{sample}/sturgeon_v2_outcome.png"
@@ -345,7 +348,7 @@ rule subset_and_run_sturgeon_timecourse:
         bam=lambda wc: config["samples"][wc.sample]["bam"],
         read_list="read_lists/{sample}/{sample}_read_ids_{timebin}min.txt",
         probes=REFERENCES.get("sturgeon_probes", "reference/probes/probelocs_chm13.bed"),
-        model=REFERENCES.get("sturgeon_model", "reference/models/general.zip")
+        model=STURGEON_MODEL
     output:
         bed="results/{sample}/{sample}_{timebin}min/merged_probes_methyl_calls.bed",
         csv="results/{sample}/{sample}_{timebin}min/merged_probes_methyl_calls_general.csv",
@@ -364,13 +367,14 @@ rule subset_and_run_sturgeon_timecourse:
             {input.read_list} \
             {wildcards.sample} \
             {wildcards.timebin} \
-            .
+            . \
+            {input.model}
         """
 
 rule sturgeon_v2_timecourse:
     input:
         bed="results/{sample}/{sample}_{timebin}min/merged_probes_methyl_calls.bed",
-        model="reference/models/cns-v2.zip"
+        model=STURGEON_V2_MODEL
     output:
         csv="results/{sample}/{sample}_{timebin}min/sturgeon_v2_outcome.csv"
     container:
