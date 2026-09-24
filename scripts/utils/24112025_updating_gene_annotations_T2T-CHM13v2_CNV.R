@@ -9,7 +9,7 @@ suppressPackageStartupMessages({
 
 script_arg <- grep("^--file=", commandArgs(), value = TRUE)
 script_path <- normalizePath(sub("^--file=", "", script_arg[1]), mustWork = TRUE)
-repo_root <- normalizePath(file.path(dirname(script_path), ".."), mustWork = TRUE)
+repo_root <- normalizePath(file.path(dirname(script_path), "..", ".."), mustWork = TRUE)
 
 gtf_file <- file.path(repo_root, "reference", "GCF_009914755.1_T2T-CHM13v2.0_genomic.gtf")
 out_bed  <- file.path(repo_root, "reference", "CNS_gene_panel.bed")

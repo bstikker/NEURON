@@ -6,11 +6,11 @@ READ_LIST="${2:?Missing read list}"
 SAMPLE_ID="${3:?Missing sample ID}"
 TIME_BIN="${4:?Missing time bin}"
 PROJECT_ROOT="${5:-.}"
+MODEL_FILE="${6:-${PROJECT_ROOT}/reference/models/general.zip}"
 
 THREADS="${THREADS:-10}"
 
 PROBES_FILE="${PROJECT_ROOT}/reference/probes/probelocs_chm13.bed"
-MODEL_FILE="${PROJECT_ROOT}/reference/models/general.zip"
 
 FINAL_DIR="${PROJECT_ROOT}/results/${SAMPLE_ID}/${SAMPLE_ID}_${TIME_BIN}min"
 mkdir -p "${FINAL_DIR}"
