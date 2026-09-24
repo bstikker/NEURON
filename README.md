@@ -72,13 +72,13 @@ Move the gzipped FASTA into NEURON/references/genome/ folder
 Sturgeon V1: https://github.com/UMCUGenetics/sturgeon
 Sturgeon V2: Yet to be published
 
-Move the model zip files to NEURON/reference/models/
+Move the model zip files to NEURON/reference/models/ (expected names: `general.zip` for V1, `cns-v2.zip` for V2). The models are not part of the container; the pipeline reads them from this folder. To use a different location or file name, change `sturgeon_model` / `sturgeon_v2_model` under `references` in config/samples.yaml.
 
 ### Test the pipeline
 A small testset has been added to the input folder to test correct installation of the workflow. It does not yield biologically meaningful outcomes, but is only to be used to test the workflow.
 
 ## Important notes
-At the time of writing (26-06-2026) Sturgeon V2 is yet to be published. So V2 functionality is not available in this repo. One published, the singularity container definitions file will be updated to include automated installation. The pipeline currently uses a pre-built container that includes a local copy of the V2 classifier.
+At the time of writing (26-06-2026) Sturgeon V2 is yet to be published. So V2 functionality is not available in this repo. One published, the singularity container definitions file will be updated to include automated installation. The pipeline currently uses a pre-built container that includes a local copy of the V2 classifier software; the V2 model file itself (`cns-v2.zip`) is still read from reference/models/.
 
 ## 💭 Feedback and Contributing
 

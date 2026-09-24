@@ -8,7 +8,7 @@ suppressPackageStartupMessages({
 
 script_arg <- grep("^--file=", commandArgs(), value = TRUE)
 script_path <- normalizePath(sub("^--file=", "", script_arg[1]), mustWork = TRUE)
-repo_root <- normalizePath(file.path(dirname(script_path), ".."), mustWork = TRUE)
+repo_root <- normalizePath(file.path(dirname(script_path), "..", ".."), mustWork = TRUE)
 
 in_bed  <- file.path(repo_root, "reference", "genes", "relevant_genes_with_chm13v2_500kb_bin_nrs.bed")
 out_bed <- file.path(repo_root, "reference", "genes", "relevant_genes_with_chm13v2_500kb_bin_nrs_fusions_singlebin.bed")
