@@ -13,6 +13,7 @@ REFERENCES = config.get("references", {})
 TIMECONFIG = config.get("timecourse", {})
 STURGEON_MODEL = REFERENCES.get("sturgeon_model", "reference/models/general.zip")
 STURGEON_V2_MODEL = REFERENCES.get("sturgeon_v2_model", "reference/models/cns-v2.zip")
+QDNASEQ_BINS = REFERENCES.get("qdnaseq_bins", "reference/bins/T2T.500kbp.SR50.rda")
 TIMECourse_BINS = TIMECONFIG.get("bins", [15, 30, 45, 60, 90, 120, 180, 240, 360, 480])
 TIMECourse_CNV_BINS = TIMECONFIG.get("cnv_bins", TIMECourse_BINS)
 TIMECourse_CLEANUP = TIMECONFIG.get("cleanup_bins", False)
@@ -84,7 +85,8 @@ rule sturgeon:
 
 rule qdnaseq_ace:
     input:
-        bam="results/{sample}/adjusted_merged_sorted.bam"
+        bam="results/{sample}/adjusted_merged_sorted.bam",
+        bins=QDNASEQ_BINS
     output:
         bed="results/{sample}/QDNAseq_ACE/{sample}_500kbp.bed",
         seg="results/{sample}/QDNAseq_ACE/{sample}_500kbp.seg",
@@ -101,7 +103,7 @@ rule qdnaseq_ace:
         CONTAINER
     shell:
         """
-        Rscript scripts/run_qdnaseq_ace.R {params.sample} {input.bam}
+        Rscript scripts/run_qdnaseq_ace.R {params.sample} {input.bam} results/{params.sample}/QDNAseq_ACE {input.bins}
         """
 
 
@@ -277,6 +279,7 @@ rule qdnaseq_ace_timecourse:
         bam="results/{sample}/{sample}_{timebin}min/subset_for_cnv.bam",
         bai="results/{sample}/{sample}_{timebin}min/subset_for_cnv.bam.bai",
         ace_script="scripts/run_qdnaseq_ace.R",
+        bins=QDNASEQ_BINS,
         cgh_script="scripts/qdnaseq_cghcall_annotate.R",
         gene_bed=REFERENCES.get("cnv_gene_bed", "reference/genes/relevant_genes_with_chm13v2_500kb_bin_nrs_fusions_singlebin.bed")
     output:
@@ -305,7 +308,8 @@ rule qdnaseq_ace_timecourse:
         Rscript {input.ace_script} \
             {wildcards.sample}_{wildcards.timebin}min \
             {input.bam} \
-            "$OUTDIR"
+            "$OUTDIR" \
+            {input.bins}
 
         Rscript {input.cgh_script} \
             {wildcards.sample}_{wildcards.timebin}min \

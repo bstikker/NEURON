@@ -1,17 +1,7 @@
 # Reference genome
 
-This directory is intentionally left empty in the Git repository.
+The pipeline does not read a reference genome: it starts from BAM files that are already aligned, and no step needs the FASTA.
 
-To run the pipeline, place the required **T2T-CHM13 v2.0** reference genome and its associated index files in this directory. These files are not distributed with the repository because of their size and licensing considerations.
+Input BAM files must be aligned to **T2T-CHM13 v2.0**, because the Sturgeon probe locations, QDNAseq bins, MGMT promoter coordinates and gene annotations all use T2T-CHM13 v2.0 coordinates.
 
-Depending on your workflow, the directory should contain files such as:
-
-```text
-chm13v2.0.fa
-chm13v2.0.fa.fai
-chm13v2.0.fa.gz
-chm13v2.0.fa.gz.fai
-chm13v2.0.mmi
-```
-
-Refer to the project documentation for the required filenames and download links
+FASTA download, if you need it for alignment: https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/chm13v2.0.fa.gz
