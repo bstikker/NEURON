@@ -65,8 +65,10 @@ Helios has singularity installed as module (1.4.1-1.el9)
 apptainer build --fakeroot cns_AUMC_pipeline_v2.2.sif cns_AUMC_pipeline_v2.2.def
 ```
 ### Reference genome
-The pipeline uses the T2T-CHM13v2.0 reference genome. Please download the FASTA file here: https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/chm13v2.0.fa.gz
-Move the gzipped FASTA into NEURON/references/genome/ folder
+The pipeline does not need a reference FASTA, but input BAM files must be aligned to T2T-CHM13v2.0 (https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/chm13v2.0.fa.gz), because the probe locations, QDNAseq bins and gene annotations are all in T2T-CHM13v2.0 coordinates.
+
+### QDNAseq bins
+The CNV analysis uses `reference/bins/T2T.500kbp.SR50.rda` (set by `qdnaseq_bins` in config/samples.yaml). The other bin sizes in that folder are kept for future development and are not used by the pipeline. See reference/bins/README.md before switching bin size.
 
 ### Downloading the classifiers (software is installed through the .def file, but models need to be downloaded manually)
 Sturgeon V1: https://github.com/UMCUGenetics/sturgeon

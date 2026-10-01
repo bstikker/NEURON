@@ -1,6 +1,6 @@
 # run_qdnaseq_ace.R
 # Usage:
-#   Rscript run_qdnaseq_ace.R <sample_id> <adjusted_bam_path> [output_dir]
+#   Rscript run_qdnaseq_ace.R <sample_id> <adjusted_bam_path> [output_dir] [bins_rda]
 
 args <- commandArgs(trailingOnly = TRUE)
 script_arg <- grep("^--file=", commandArgs(), value = TRUE)
@@ -8,7 +8,7 @@ script_path <- normalizePath(sub("^--file=", "", script_arg[1]), mustWork = TRUE
 repo_root <- normalizePath(file.path(dirname(script_path), ".."), mustWork = TRUE)
 
 if (length(args) < 2) {
-  stop("Usage: Rscript run_qdnaseq_ace.R <sample_id> <adjusted_bam_path> [output_dir]")
+  stop("Usage: Rscript run_qdnaseq_ace.R <sample_id> <adjusted_bam_path> [output_dir] [bins_rda]")
 }
 
 sample_id <- args[1]
@@ -32,7 +32,11 @@ suppressMessages({
   library(Biobase)
 })
 
-bins_path <- file.path(repo_root, "reference", "bins", "T2T.500kbp.SR50.rda")
+if (length(args) >= 4) {
+  bins_path <- args[4]
+} else {
+  bins_path <- file.path(repo_root, "reference", "bins", "T2T.500kbp.SR50.rda")
+}
 if (!file.exists(bins_path)) stop("QDNAseq bins file not found: ", bins_path)
 load(bins_path)
 if (!exists("bins")) stop("Object 'bins' not found after loading ", bins_path)
