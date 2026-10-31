@@ -1,4 +1,4 @@
-container: "singularity/cns_AUMC_pipeline_v2.2.sif" # Specify container path relative to container
+container: "singularity/cns_AUMC_pipeline_v2.3.sif" # Specify container path relative to container
 
 #Configure default resources
 threads:

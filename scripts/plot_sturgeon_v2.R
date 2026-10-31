@@ -15,8 +15,10 @@ csv_file <- args[1]
 sample_id <- args[2]
 out_png <- args[3]
 
-# Read the CSV
-df <- read.csv(csv_file, stringsAsFactors = FALSE, check.names = FALSE)
+# Read the scores: tab-separated from the public sturgeon-v2 release, comma-separated from older versions
+header <- readLines(csv_file, n = 1, warn = FALSE)
+df <- read.table(csv_file, header = TRUE, sep = if (grepl("\t", header)) "\t" else ",",
+                 quote = "\"", comment.char = "", stringsAsFactors = FALSE, check.names = FALSE)
 
 # Extract predicted classes and confidence
 class_cols <- setdiff(colnames(df), c("probes","number_probes","sample","Sample_ID"))
