@@ -1,83 +1,307 @@
 ---
-title: "Sturgeon/nanopore molecular report"
-subtitle: "Pipeline version: `r params$version` | Run date: `r params$rundate` | Sample ID: `r params$sample`"
 output:
   pdf_document:
     latex_engine: xelatex
     keep_tex: true
+    includes:
+      in_header: report_style.tex
+geometry: "a4paper, top=2.2cm, bottom=2.2cm, left=2cm, right=2cm, headheight=14pt, headsep=12pt, footskip=26pt"
+fontsize: 10pt
 params:
   sample: "SAMPLE_NAME"
   version: "VERSION_PLACEHOLDER"
   rundate: "RUN_DATE_PLACEHOLDER"
-  knit_root_dir: '.'
+  v1_model: ""
+  v2_model: ""
+  top_n: 5
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
-library(readr)
-library(dplyr)
-library(knitr)
-library(ggplot2)
-library(stringr)
-```
-# Sturgeon V1 classification
-```{r sturgeon_plot}
-sturgeon_plot_path <- file.path("results", params$sample, "merged_probes_methyl_calls_general.pdf")
-if (file.exists(sturgeon_plot_path)) {
-  knitr::include_graphics(normalizePath(sturgeon_plot_path, mustWork = TRUE), rel_path = FALSE)
-} else {
-  cat("Sturgeon classification plot not found.")
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE, results = "asis")
+# Chunks below write LaTeX; wrap their output so pandoc passes it through unchanged
+knitr::knit_hooks$set(rawlatex = function(before, options) if (before) "\n```{=latex}\n" else "\n```\n")
+suppressPackageStartupMessages({
+  library(readr)
+  library(dplyr)
+})
+
+sample   <- params$sample
+top_n    <- as.integer(params$top_n)
+res_dir  <- file.path("results", sample)
+ace_dir  <- file.path(res_dir, "QDNAseq_ACE")
+logo     <- normalizePath(file.path("scripts", "logo_header.png"), mustWork = FALSE)
+
+# Escape text for LaTeX
+tex <- function(x) {
+  x <- as.character(x)
+  x[is.na(x)] <- "NA"
+  x <- gsub("\\", "\001", x, fixed = TRUE)
+  x <- gsub("([&%$#_{}])", "\\\\\\1", x)
+  x <- gsub("~", "\002", x, fixed = TRUE)
+  x <- gsub("^", "\003", x, fixed = TRUE)
+  x <- gsub("\001", "\\textbackslash{}", x, fixed = TRUE)
+  x <- gsub("\002", "\\textasciitilde{}", x, fixed = TRUE)
+  gsub("\003", "\\textasciicircum{}", x, fixed = TRUE)
 }
+out <- function(...) cat(..., sep = "")
+num <- function(x, digits = 2) {
+  x <- suppressWarnings(as.numeric(x))
+  ifelse(is.na(x), "NA", formatC(x, format = "f", digits = digits, big.mark = ","))
+}
+int <- function(x) {
+  x <- suppressWarnings(as.numeric(x))
+  ifelse(is.na(x), "NA", formatC(round(x), format = "d", big.mark = ","))
+}
+read_tsv_safe <- function(path) {
+  if (!file.exists(path)) return(NULL)
+  tryCatch(read_tsv(path, show_col_types = FALSE, progress = FALSE), error = function(e) NULL)
+}
+# First column whose name matches one of the candidates (case-insensitive)
+pick <- function(df, candidates) {
+  hit <- match(tolower(candidates), tolower(names(df)))
+  hit <- hit[!is.na(hit)]
+  if (length(hit) == 0) return(NA)
+  df[[hit[1]]][1]
+}
+
+# Classifier scores. Sturgeon writes comma-separated files, the public sturgeon-v2
+# release tab-separated; both have one column per class plus a probe-count column.
+# With several samplings (rows), scores are averaged, as the classifiers do.
+read_scores <- function(path, probe_cols) {
+  if (!file.exists(path)) return(NULL)
+  header <- readLines(path, n = 1, warn = FALSE)
+  df <- tryCatch(
+    read.table(path, header = TRUE, sep = if (grepl("\t", header)) "\t" else ",",
+               quote = "\"", comment.char = "", check.names = FALSE, stringsAsFactors = FALSE),
+    error = function(e) NULL)
+  if (is.null(df) || nrow(df) == 0) return(NULL)
+  probe_col <- intersect(probe_cols, names(df))
+  classes <- setdiff(names(df), c(probe_cols, "sample", "Sample_ID"))
+  scores <- vapply(df[classes], function(v) mean(suppressWarnings(as.numeric(v)), na.rm = TRUE), numeric(1))
+  scores <- scores[!is.na(scores)]
+  if (length(scores) == 0) return(NULL)
+  list(
+    table = data.frame(class = names(scores), score = unname(scores), stringsAsFactors = FALSE) %>%
+      arrange(desc(score)) %>% mutate(rank = row_number()),
+    probes = if (length(probe_col)) suppressWarnings(as.numeric(df[[probe_col[1]]][1])) else NA,
+    samplings = nrow(df)
+  )
+}
+
+v1      <- read_scores(file.path(res_dir, "merged_probes_methyl_calls_general.csv"), c("number_probes"))
+v2      <- read_scores(file.path(res_dir, "sturgeon_v2_outcome.csv"), c("probes", "number_probes"))
+mgmt    <- read_tsv_safe(file.path(res_dir, "MGMT_analysis", "mgmt_prediction.tsv"))
+ace     <- read_tsv_safe(file.path(ace_dir, "ACE_summary.tsv"))
+cnv_qc  <- read_tsv_safe(file.path(ace_dir, paste0(sample, "_QDNAseq_QC.tsv")))
+versions <- read_tsv_safe(file.path(res_dir, "software_versions.tsv"))
+
+version_of <- function(component, field = "version") {
+  if (is.null(versions)) return(NA)
+  hit <- versions[versions$component == component, field, drop = TRUE]
+  if (length(hit) == 0) NA else hit[1]
+}
+pipeline_label <- paste0(params$version,
+  if (!is.na(version_of("NEURON", "details"))) paste0(" (", sub("^git commit ", "", version_of("NEURON", "details")), ")") else "")
+container_label <- ifelse(is.na(version_of("Container")) || version_of("Container") %in% c("", "not found"),
+                          "not recorded", version_of("Container"))
 ```
 
-# Sturgeon V2 classification
-```{r sturgeon_v2_plot, out.width='100%', fig.align='center'}
-sturgeon_v2_plot_path <- file.path("results", params$sample, "sturgeon_v2_outcome.png")
+```{r title-page, rawlatex=TRUE}
+out("\\renewcommand{\\neuronsample}{", tex(sample), "}\n")
+out("\\renewcommand{\\neurongenerated}{", format(Sys.time(), "%Y-%m-%d %H:%M"), "}\n")
+out("\\thispagestyle{firstpage}\n")
 
-if (file.exists(sturgeon_v2_plot_path)) {
-  knitr::include_graphics(normalizePath(sturgeon_v2_plot_path, mustWork = TRUE), rel_path = FALSE)
-} else {
-  cat("Sturgeon v2 classification plot not found.")
+# Title block
+out("\\noindent\\begin{minipage}[b]{0.6\\textwidth}\n",
+    "{\\footnotesize\\bfseries\\color{accent}NEURON\\enspace\\textbar\\enspace NEURO-ONCOLOGY NANOPORE PIPELINE}\\\\[3pt]\n",
+    "{\\fontsize{22}{26}\\selectfont\\bfseries\\color{brand}Molecular tumour report}\\\\[3pt]\n",
+    "{\\small\\raggedright\\color{muted}Methylation-based classification, \\textit{MGMT} promoter status and copy-number profile\\par}\n",
+    "\\end{minipage}\\hfill\n")
+if (file.exists(logo)) {
+  out("\\begin{minipage}[b]{0.3\\textwidth}\\raggedleft\\includegraphics[width=\\linewidth]{", logo, "}\\end{minipage}\n")
 }
+out("\\par\\vspace{10pt}\n")
+
+# Sample details strip
+field <- function(label, value) paste0("\\fieldlabel{", label, "}\\newline {\\bfseries ", value, "}")
+out("\\begin{infopanel}\n",
+    "\\begin{tabularx}{\\linewidth}{@{}XXXX@{}}\n",
+    field("Sample ID", tex(sample)), " & ",
+    field("Report date", tex(params$rundate)), " & ",
+    field("Pipeline", tex(pipeline_label)), " & ",
+    field("Container", tex(container_label)), " \\\\\n",
+    "\\end{tabularx}\n\\end{infopanel}\n\\vspace{4pt}\n")
 ```
 
-\newpage
-# MGMT Promoter Methylation
-```{r MGMT}
-mgmt_path <- file.path("results", params$sample, "MGMT_analysis", "mgmt_prediction.tsv")
-if (file.exists(mgmt_path)) {
-  mgmt <- read_tsv(mgmt_path, show_col_types = FALSE)
-  kable(mgmt, caption = "MGMT Promoter Methylation Score")
-} else {
-  cat("MGMT methylation prediction not found.")
+```{r key-results, rawlatex=TRUE}
+out("\\section{Key results}\n")
+
+classifier_card <- function(label, res, unit) {
+  if (is.null(res)) return(c(label, "Not available", "No classifier output found"))
+  top <- res$table[1, ]
+  c(label, tex(top$class),
+    paste0("Raw score \\textbf{", num(top$score, 4), "}\\enspace\\textbar\\enspace ", int(res$probes), " ", unit))
 }
+cards <- list(
+  classifier_card(paste0("Sturgeon v1", if (nzchar(params$v1_model)) paste0(" \\textbar\\ ", tex(params$v1_model))), v1, "probes"),
+  classifier_card(paste0("Sturgeon v2", if (nzchar(params$v2_model)) paste0(" \\textbar\\ ", tex(params$v2_model))), v2, "CpG sites")
+)
+
+if (!is.null(mgmt)) {
+  cards[[3]] <- c("\\textit{MGMT} promoter", tex(pick(mgmt, "status")),
+    paste0("P(methylated) \\textbf{", num(pick(mgmt, "probability"), 3), "}\\enspace\\textbar\\enspace ",
+           num(pick(mgmt, "avg_percent"), 1), "\\% mean methylation"))
+} else {
+  cards[[3]] <- c("\\textit{MGMT} promoter", "Not available", "No MGMT prediction found")
+}
+
+if (!is.null(ace) && !is.na(pick(ace, "cellularity"))) {
+  cellularity <- suppressWarnings(as.numeric(pick(ace, "cellularity")))
+  cards[[4]] <- c("Tumour cell fraction (ACE)", paste0(num(100 * cellularity, 0), "\\%"),
+    paste0("Ploidy \\textbf{", num(pick(ace, "ploidy"), 1), "}\\enspace\\textbar\\enspace estimated from the copy-number profile"))
+} else {
+  cards[[4]] <- c("Tumour cell fraction (ACE)", "Not available", "No ACE estimate found")
+}
+
+out("\\begin{tcbraster}[raster columns=2, raster equal height=rows, raster column skip=8pt, raster row skip=8pt]\n")
+for (card in cards) out("\\resultcard{", card[1], "}{", card[2], "}{", card[3], "}\n")
+out("\\end{tcbraster}\n")
 ```
 
-\newpage
-# CNV Profile
-```{r CNV, out.width='90%', fig.align='center'}
-cnv_path <- file.path("results", params$sample, "QDNAseq_ACE", paste0(params$sample, "_CNV.png"))
-if (file.exists(cnv_path)) {
-  knitr::include_graphics(normalizePath(cnv_path, mustWork = TRUE), rel_path = FALSE)
-} else {
-  cat("CNV profile not found.")
+```{r classifier-scores, rawlatex=TRUE}
+out("\\section{Classifier scores}\n")
+out("{\\small\\color{muted}The highest-scoring classes, with the raw score each classifier reports (0--1, ",
+    "all classes sum to 1). The bar shows the same score on a 0--1 scale.}\\par\\vspace{2pt}\n")
+
+score_table <- function(title, res, model, unit) {
+  out("\\subsection{", title, "}\n")
+  if (is.null(res)) {
+    out("\\begin{notebox}No classifier output found for this sample.\\end{notebox}\n")
+    return(invisible())
+  }
+  details <- c(
+    if (nzchar(model)) paste0("model ", tex(model)),
+    paste0(int(res$probes), " ", unit),
+    paste0(nrow(res$table), " classes"),
+    if (res$samplings > 1) paste0("mean of ", res$samplings, " samplings"))
+  out("{\\footnotesize\\color{muted}", paste(details, collapse = "\\enspace\\textbar\\enspace "), "}\\par\\vspace{2pt}\n")
+
+  bar_cm <- 4.5
+  shown <- head(res$table, top_n)
+  out("\\begin{tabularx}{\\linewidth}{r X r l}\n",
+      "\\tableheader \\thcell{Rank} & \\thcell{Class} & \\thcell{Raw score} & \\thcell{Score (0--1)} \\\\\n")
+  for (i in seq_len(nrow(shown))) {
+    s <- max(0, min(1, shown$score[i]))
+    row <- c(shown$rank[i], tex(shown$class[i]), num(shown$score[i], 4),
+             sprintf("\\scorebar{%.2fcm}{%.2fcm}", bar_cm * s, bar_cm * (1 - s)))
+    if (i == 1) row[1:3] <- paste0("\\textbf{", row[1:3], "}")
+    if (i %% 2 == 0) out("\\rowcolor{panel}")
+    out(paste(row, collapse = " & "), " \\\\\n")
+  }
+  out("\\bottomrule\n\\end{tabularx}\n")
 }
+score_table("Sturgeon v1", v1, params$v1_model, "probes")
+score_table("Sturgeon v2", v2, params$v2_model, "CpG sites")
 ```
 
-# ACE Tumor Purity & Ploidy
-```{r ACE}
-ace_path <- file.path("results", params$sample, "QDNAseq_ACE", "ACE_summary.tsv")
-if (file.exists(ace_path)) {
-  ace <- read_tsv(ace_path, show_col_types = FALSE)
-  kable(ace, caption = "Tumor Purity and Ploidy Estimates from ACE")
-} else {
-  cat("ACE estimate not found.")
+```{r classifier-plots, rawlatex=TRUE}
+out("\\newpage\n\\section{Classifier plots}\n")
+plot_or_note <- function(title, path, height) {
+  out("\\subsection{", title, "}\n")
+  if (file.exists(path)) {
+    out("\\begin{center}\\includegraphics[width=\\linewidth,height=", height,
+        ",keepaspectratio]{", normalizePath(path), "}\\end{center}\n")
+  } else {
+    out("\\begin{notebox}Plot not found: ", tex(basename(path)), "\\end{notebox}\n")
+  }
 }
+plot_or_note("Sturgeon v1", file.path(res_dir, "merged_probes_methyl_calls_general.pdf"), "0.4\\textheight")
+plot_or_note("Sturgeon v2", file.path(res_dir, "sturgeon_v2_outcome.png"), "0.4\\textheight")
 ```
-# Report Metadata
-```{r metadata}
-cat("Report generated on:", Sys.Date(), "
-")
-cat("User:", Sys.info()[['user']], "
-")
+
+```{r cnv, rawlatex=TRUE}
+out("\\newpage\n\\section{Copy-number profile}\n")
+plot_or_note("QDNAseq copy-number profile", file.path(ace_dir, paste0(sample, "_CNV.png")), "0.42\\textheight")
+
+kv_table <- function(rows) {
+  out("\\begin{tabularx}{\\linewidth}{X r}\n")
+  for (i in seq_along(rows)) {
+    if (i %% 2 == 0) out("\\rowcolor{panel}")
+    out("\\textcolor{muted}{", names(rows)[i], "} & \\textbf{", rows[[i]], "} \\\\\n")
+  }
+  out("\\end{tabularx}\n")
+}
+
+out("\\vspace{6pt}\\noindent\\begin{minipage}[t]{0.48\\linewidth}\n\\subsection{Tumour cell fraction and ploidy (ACE)}\n")
+if (!is.null(ace)) {
+  kv_table(c(
+    "Cellularity"    = num(pick(ace, "cellularity"), 2),
+    "Ploidy"         = num(pick(ace, "ploidy"), 1),
+    "Model fit error" = num(pick(ace, c("error", "errorlist")), 4)))
+} else out("\\begin{notebox}No ACE estimate found.\\end{notebox}\n")
+out("\\end{minipage}\\hfill\\begin{minipage}[t]{0.48\\linewidth}\n\\subsection{Copy-number quality control}\n")
+if (!is.null(cnv_qc)) {
+  kv_table(c(
+    "Expected noise (sigma)" = num(pick(cnv_qc, "expected_sigma"), 4),
+    "Delta sigma"            = num(pick(cnv_qc, "delta_sigma"), 4),
+    "Called segments"        = int(pick(cnv_qc, "called_segments"))))
+} else out("\\begin{notebox}No QDNAseq QC found.\\end{notebox}\n")
+out("\\end{minipage}\n")
+```
+
+```{r mgmt, rawlatex=TRUE}
+out("\\section{\\textit{MGMT} promoter methylation}\n")
+if (!is.null(mgmt)) {
+  kv_table(c(
+    "Status"                       = tex(pick(mgmt, "status")),
+    "Probability of methylation"   = num(pick(mgmt, "probability"), 4),
+    "Mean promoter methylation"    = paste0(num(pick(mgmt, "avg_percent"), 2), "\\%"),
+    "CpG sites in promoter"        = int(pick(mgmt, "n_cpgs")),
+    "Mean coverage per CpG"        = paste0(num(pick(mgmt, "avg_coverage"), 2), "$\\times$"),
+    "CpGs used"                    = tex(pick(mgmt, "cpg_source"))))
+  warn <- pick(mgmt, "warning")
+  if (!is.na(warn) && nzchar(warn)) {
+    # Messages are joined with "; ", but a message can itself contain "; "; split only where the next one starts
+    items <- trimws(strsplit(as.character(warn), ";\\s*(?=[A-Z])", perl = TRUE)[[1]])
+    items <- items[nzchar(items)]
+    out("\\vspace{4pt}\\begin{notebox}\\textbf{Notes from the MGMT analysis}\\\\\n",
+        paste0("-- ", tex(items), collapse = "\\\\\n"), "\\end{notebox}\n")
+  }
+} else out("\\begin{notebox}No MGMT prediction found.\\end{notebox}\n")
+```
+
+```{r software, rawlatex=TRUE}
+out("\\newpage\n\\section{Software and reference data}\n")
+if (!is.null(versions) && nrow(versions) > 0) {
+  versions[is.na(versions)] <- ""
+  # longtable, so the table can continue on the next page with the header repeated
+  header <- "\\tableheader \\thcell{Component} & \\thcell{Version} & \\thcell{Details} \\\\\n"
+  out("\\begingroup\\small\\setlength{\\LTpre}{0pt}\\setlength{\\LTpost}{0pt}\n",
+      "\\begin{longtable}{@{}>{\\raggedright\\arraybackslash}p{4.4cm} >{\\raggedright\\arraybackslash}p{5.4cm} ",
+      ">{\\raggedright\\arraybackslash}p{\\dimexpr\\linewidth-9.8cm-6\\tabcolsep\\relax}@{}}\n",
+      header, "\\endfirsthead\n", header, "\\endhead\n")
+  for (cat_name in unique(versions$category)) {
+    out("\\multicolumn{3}{@{}l}{\\rule{0pt}{14pt}\\bfseries\\color{accent}\\footnotesize\\MakeUppercase{", tex(cat_name), "}} \\\\\n")
+    rows <- versions[versions$category == cat_name, ]
+    for (i in seq_len(nrow(rows))) {
+      if (i %% 2 == 0) out("\\rowcolor{panel}")
+      version <- tex(rows$version[i])
+      if (startsWith(rows$version[i], "md5 ")) version <- paste0("\\texttt{\\footnotesize ", version, "}")
+      # Long file names: allow line breaks after underscores and slashes
+      breakable <- function(x) gsub("(\\\\_|/)", "\\1\\\\allowbreak{}", tex(x))
+      out(breakable(rows$component[i]), " & ", version, " & \\textcolor{muted}{\\footnotesize ", breakable(rows$details[i]), "} \\\\\n")
+    }
+  }
+  out("\\bottomrule\n\\end{longtable}\n\\endgroup\n")
+} else {
+  out("\\begin{notebox}Software versions were not recorded (software\\_versions.tsv not found).\\end{notebox}\n")
+}
+
+out("\\section{Methods and references}\n",
+    "{\\small\n",
+    "\\textbf{Classification.} Sturgeon (Vermeulen et al., \\textit{Nature} 2023) and Sturgeon v2 ",
+    "(github.com/deRidderLab/sturgeon-v2), applied to nanopore methylation calls extracted with modkit.\\\\[2pt]\n",
+    "\\textbf{\\textit{MGMT} promoter.} Logistic model on mean promoter methylation (Patel et al. 2022).\\\\[2pt]\n",
+    "\\textbf{Copy number.} QDNAseq (Scheinin et al., \\textit{Genome Research} 2014) with CGHcall segment calls; ",
+    "tumour cell fraction and ploidy with ACE (Poell et al. 2019).\\par}\n")
 ```
