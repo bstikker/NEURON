@@ -1,0 +1,98 @@
+% Layout and styling for scripts/report.Rmd (included in the LaTeX preamble).
+
+% ---------- Fonts ----------
+% TeX Gyre Heros (Helvetica-like) when installed, else Latin Modern Sans.
+\IfFontExistsTF{texgyreheros-regular.otf}{%
+  \setmainfont{texgyreheros}[Extension=.otf, UprightFont=*-regular, BoldFont=*-bold,
+    ItalicFont=*-italic, BoldItalicFont=*-bolditalic]%
+}{%
+  \IfFontExistsTF{lmsans10-regular.otf}{%
+    \setmainfont{lmsans10}[Extension=.otf, UprightFont=*-regular, BoldFont=*-bold,
+      ItalicFont=*-oblique, BoldItalicFont=*-boldoblique]%
+  }{}%
+}
+
+% ---------- Colours (Amsterdam UMC palette) ----------
+\usepackage{xcolor}
+\definecolor{brand}{HTML}{05394A}      % dark teal
+\definecolor{accent}{HTML}{EE7F1A}     % orange
+\definecolor{alert}{HTML}{E30613}      % red
+\definecolor{muted}{HTML}{5F6F76}      % grey text
+\definecolor{rule}{HTML}{D5DDE0}       % hairlines
+\definecolor{panel}{HTML}{F2F5F6}      % light panel background
+\definecolor{barbg}{HTML}{E3E9EB}      % empty part of score bars
+
+\usepackage{graphicx}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{booktabs}
+\usepackage{colortbl}
+\usepackage{lastpage}
+\usepackage[skins,raster]{tcolorbox}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{float}
+\usepackage{ragged2e}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+\renewcommand{\arraystretch}{1.25}
+\color{brand!90!black}
+
+% ---------- Section headings ----------
+\titleformat{\section}
+  {\color{brand}\large\bfseries}{}{0pt}{}
+  [{\vspace{-4pt}\color{accent}\rule{\linewidth}{1.2pt}}]
+\titlespacing*{\section}{0pt}{14pt}{8pt}
+\titleformat{\subsection}
+  {\color{brand}\normalsize\bfseries}{}{0pt}{}
+\titlespacing*{\subsection}{0pt}{10pt}{4pt}
+
+% ---------- Header and footer ----------
+% \neuronsample and \neurongenerated are set at the start of the document body.
+\newcommand{\neuronsample}{}
+\newcommand{\neurongenerated}{}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\renewcommand{\footrulewidth}{0pt}
+\fancyhead[L]{\footnotesize\color{muted}\textbf{\color{brand}NEURON}\enspace Molecular tumour report}
+\fancyhead[R]{\footnotesize\color{muted}Sample \textbf{\color{brand}\neuronsample}}
+\fancyfoot[L]{\footnotesize\color{muted}Generated \neurongenerated}
+\fancyfoot[R]{\footnotesize\color{muted}Page \thepage\ of \pageref*{LastPage}}
+\fancypagestyle{firstpage}{%
+  \fancyhf{}%
+  \fancyfoot[L]{\footnotesize\color{muted}Generated \neurongenerated}%
+  \fancyfoot[R]{\footnotesize\color{muted}Page \thepage\ of \pageref*{LastPage}}%
+}
+
+% ---------- Building blocks ----------
+% Small grey label above a value
+\newcommand{\fieldlabel}[1]{{\scriptsize\color{muted}\MakeUppercase{#1}}}
+
+% Key-result card: \resultcard{label}{headline}{detail}
+\newtcolorbox{cardbox}{enhanced, colback=white, colframe=rule, boxrule=0.6pt, arc=2pt,
+  borderline north={2.5pt}{0pt}{accent}, left=9pt, right=9pt, top=8pt, bottom=8pt}
+\newcommand{\resultcard}[3]{%
+  \begin{cardbox}
+    \fieldlabel{#1}\par\vspace{2pt}
+    {\large\bfseries\color{brand}#2\par}\vspace{3pt}
+    {\small\color{muted}#3\par}
+  \end{cardbox}}
+
+% Light panel for the sample details strip
+\newtcolorbox{infopanel}{enhanced, colback=panel, colframe=panel, boxrule=0pt, arc=2pt,
+  left=10pt, right=10pt, top=7pt, bottom=7pt}
+
+% Note box with an orange left border (warnings, remarks)
+\newtcolorbox{notebox}{enhanced, colback=accent!6, colframe=accent!6, boxrule=0pt, arc=0pt,
+  borderline west={2.5pt}{0pt}{accent}, left=8pt, right=8pt, top=5pt, bottom=5pt, fontupper=\small}
+
+% Horizontal score bar: \scorebar{filled width}{empty width}, widths computed in R
+\newcommand{\scorebar}[2]{%
+  \textcolor{brand}{\rule[0.1ex]{#1}{1.4ex}}\textcolor{barbg}{\rule[0.1ex]{#2}{1.4ex}}}
+
+% Table header row colour
+\newcommand{\tableheader}{\rowcolor{brand}}
+\newcommand{\thcell}[1]{\textcolor{white}{\bfseries\footnotesize #1}}

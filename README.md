@@ -47,6 +47,15 @@ This feature can be run as follows:
 snakemake --profile profile all_timecourse
 ```
 
+### Final report
+Each sample gets `results/<sample>/final_report.pdf` with:
+- Key results: top Sturgeon v1 and v2 class, _MGMT_ promoter status and tumour cell fraction
+- Classifier scores: the top 5 classes of Sturgeon v1 and v2 with their raw scores and the number of probes/CpG sites used
+- Classifier plots, copy-number profile with ACE and QDNAseq QC, and _MGMT_ details
+- Software and reference data: versions of the pipeline (with git commit), container, classifiers, tools and R packages, and MD5 checksums of the model and reference files
+
+The same version information is saved as `results/<sample>/software_versions.tsv`.
+
 ## ⬇️ Installation
 
 ### If you haven't installed snakemake yet, this pipeline has been validated using version 9.8.1.

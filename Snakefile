@@ -3,6 +3,7 @@
 configfile: "config/samples.yaml"
 
 import os
+import subprocess
 import sys
 from datetime import datetime
 
@@ -14,6 +15,34 @@ TIMECONFIG = config.get("timecourse", {})
 STURGEON_MODEL = REFERENCES.get("sturgeon_model", "reference/models/general.zip")
 STURGEON_V2_MODEL = REFERENCES.get("sturgeon_v2_model", "reference/models/cns-v2.5.zip")
 QDNASEQ_BINS = REFERENCES.get("qdnaseq_bins", "reference/bins/T2T.500kbp.SR50.rda")
+PIPELINE_VERSION = "v1.0.0"
+MGMT_MODEL = REFERENCES.get("mgmt_model", "scripts/mgmt_137sites_mean_model.Rdata")
+MGMT_BED = REFERENCES.get("mgmt_bed", "scripts/mgmt_promoter_coordinates_T2T.bed")
+STURGEON_PROBES = REFERENCES.get("sturgeon_probes", "reference/probes/probelocs_chm13.bed")
+CNV_GENE_BED = REFERENCES.get("cnv_gene_bed", "reference/genes/relevant_genes_with_chm13v2_500kb_bin_nrs_fusions_singlebin.bed")
+
+
+def pipeline_git_commit():
+    """Short git commit of the pipeline, with '-modified' if tracked files differ from it.
+    config/samples.yaml is ignored, since it is edited for every run."""
+    try:
+        git = ["git", "-C", workflow.basedir]
+        commit = subprocess.run(git + ["rev-parse", "--short", "HEAD"],
+                                capture_output=True, text=True, check=True).stdout.strip()
+        changed = subprocess.run(git + ["status", "--porcelain", "--untracked-files=no", "--", ".",
+                                        ":(exclude)config/samples.yaml"],
+                                 capture_output=True, text=True, check=True).stdout.strip()
+        return commit + ("-modified" if changed else "")
+    except Exception:
+        return "unknown"
+
+
+try:
+    from snakemake import __version__ as SNAKEMAKE_VERSION
+except Exception:
+    SNAKEMAKE_VERSION = "unknown"
+PIPELINE_COMMIT = pipeline_git_commit()
+
 TIMECourse_BINS = TIMECONFIG.get("bins", [15, 30, 45, 60, 90, 120, 180, 240, 360, 480])
 TIMECourse_CNV_BINS = TIMECONFIG.get("cnv_bins", TIMECourse_BINS)
 TIMECourse_CLEANUP = TIMECONFIG.get("cleanup_bins", False)
@@ -135,8 +164,8 @@ rule qdnaseq_cghcall_annotate:
 rule mgmt_predict_promoter:
     input:
         modkit="results/{sample}/modkit_extracted.txt",
-        model=REFERENCES.get("mgmt_model", "scripts/mgmt_137sites_mean_model.Rdata"),
-        bed=REFERENCES.get("mgmt_bed", "scripts/mgmt_promoter_coordinates_T2T.bed")
+        model=MGMT_MODEL,
+        bed=MGMT_BED
     output:
         result="results/{sample}/MGMT_analysis/mgmt_prediction.tsv"
     resources:
@@ -186,16 +215,29 @@ rule sturgeon_v2:
 rule report:
     input:
         sturgeon_pdf="results/{sample}/merged_probes_methyl_calls_general.pdf",
+        sturgeon_csv="results/{sample}/merged_probes_methyl_calls_general.csv",
         mgmt="results/{sample}/MGMT_analysis/mgmt_prediction.tsv",
         cnv="results/{sample}/QDNAseq_ACE/{sample}_CNV.png",
+        cnv_qc="results/{sample}/QDNAseq_ACE/{sample}_QDNAseq_QC.tsv",
         ace="results/{sample}/QDNAseq_ACE/ACE_summary.tsv",
         sturgeon_v2_png="results/{sample}/sturgeon_v2_outcome.png",
-        rmd="scripts/report.Rmd"
+        sturgeon_v2_csv="results/{sample}/sturgeon_v2_outcome.csv",
+        rmd="scripts/report.Rmd",
+        style="scripts/report_style.tex",
+        logo="scripts/logo_header.png",
+        versions_script="scripts/collect_software_versions.sh"
     output:
-        pdf="results/{sample}/final_report.pdf"
+        pdf="results/{sample}/final_report.pdf",
+        versions="results/{sample}/software_versions.tsv"
     params:
         sample="{sample}",
-        version="v1.0.0",
+        version=PIPELINE_VERSION,
+        commit=PIPELINE_COMMIT,
+        snakemake_version=SNAKEMAKE_VERSION,
+        v1_model=os.path.basename(STURGEON_MODEL),
+        v2_model=os.path.basename(STURGEON_V2_MODEL),
+        checksum_files=" ".join([STURGEON_MODEL, STURGEON_V2_MODEL, MGMT_MODEL, MGMT_BED,
+                                 STURGEON_PROBES, QDNASEQ_BINS, CNV_GENE_BED]),
         rundate=lambda wc: datetime.today().strftime("%Y-%m-%d")
     container:
         CONTAINER
@@ -217,6 +259,10 @@ rule report:
         # Remove any old final output in the sample folder
         rm -f "$OUTDIR/final_report.pdf"
 
+        # Record software versions and model/reference checksums for the report
+        bash {input.versions_script} "{params.version}" "{params.commit}" "{params.snakemake_version}" \
+            {params.checksum_files} > {output.versions}
+
         # Render into a unique temp directory for this run only
         set +e
         Rscript -e "rmarkdown::render(
@@ -224,7 +270,9 @@ rule report:
             params = list(
                 sample = '{wildcards.sample}',
                 version = '{params.version}',
-                rundate = '{params.rundate}'
+                rundate = '{params.rundate}',
+                v1_model = '{params.v1_model}',
+                v2_model = '{params.v2_model}'
             ),
             output_dir = normalizePath('$TMP_RENDER_DIR', mustWork = TRUE),
             intermediates_dir = normalizePath('$TMP_RENDER_DIR', mustWork = TRUE),
