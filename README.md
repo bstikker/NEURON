@@ -77,9 +77,9 @@ The CNV analysis uses `reference/bins/T2T.500kbp.SR50.rda` (set by `qdnaseq_bins
 
 ### Downloading the classifiers (software is installed through the .def file, but models need to be downloaded manually)
 Sturgeon V1: https://github.com/UMCUGenetics/sturgeon
-Sturgeon V2: https://github.com/deRidderLab/sturgeon-v2 (model `cns-v2`: https://zenodo.org/records/22899108)
+Sturgeon V2: https://github.com/deRidderLab/sturgeon-v2 (model file `cns-v2.5.zip`: https://zenodo.org/records/22899108)
 
-Move the model zip files to NEURON/reference/models/ (expected names: `general.zip` for V1, `cns-v2.zip` for V2). The models are not part of the container; the pipeline reads them from this folder. To use a different location or file name, change `sturgeon_model` / `sturgeon_v2_model` under `references` in config/samples.yaml.
+Move the model zip files to NEURON/reference/models/ (expected names: `general.zip` for V1, `cns-v2.5.zip` for V2). The models are not part of the container; the pipeline reads them from this folder. To use a different location or file name, change `sturgeon_model` / `sturgeon_v2_model` under `references` in config/samples.yaml.
 
 ### Test the pipeline
 A small testset has been added to the input folder to test correct installation of the workflow. It does not yield biologically meaningful outcomes, but is only to be used to test the workflow.
