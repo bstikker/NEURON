@@ -61,9 +61,14 @@ pip install snakemake-executor-plugin-slurm
 Helios has singularity installed as module (1.4.1-1.el9)
 
 ### Install container from .def file
+Run the build from the repository root (the NEURON/ folder), not from inside singularity/: the definition file copies `singularity/sturgeon.yml` using a path relative to the folder you build from.
 ```bash
-apptainer build --fakeroot cns_AUMC_pipeline_v2.2.sif cns_AUMC_pipeline_v2.2.def
+cd NEURON
+apptainer build --fakeroot singularity/cns_AUMC_pipeline_v2.3.sif singularity/cns_AUMC_pipeline_v2.3.def
 ```
+This writes the container to `singularity/cns_AUMC_pipeline_v2.3.sif`, where config/samples.yaml expects it.
+
+The container installs Sturgeon V2 from https://github.com/deRidderLab/sturgeon-v2, pinned to a fixed commit, so the build needs internet access to GitHub. The previous definition (v2.2, with a local copy of Sturgeon V2) is kept in singularity/ for reference.
 ### Reference genome
 The pipeline does not need a reference FASTA, but input BAM files must be aligned to T2T-CHM13v2.0 (https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/chm13v2.0.fa.gz), because the probe locations, QDNAseq bins and gene annotations are all in T2T-CHM13v2.0 coordinates.
 
@@ -72,15 +77,12 @@ The CNV analysis uses `reference/bins/T2T.500kbp.SR50.rda` (set by `qdnaseq_bins
 
 ### Downloading the classifiers (software is installed through the .def file, but models need to be downloaded manually)
 Sturgeon V1: https://github.com/UMCUGenetics/sturgeon
-Sturgeon V2: Yet to be published
+Sturgeon V2: https://github.com/deRidderLab/sturgeon-v2 (model file `cns-v2.5.zip`: https://zenodo.org/records/22899108)
 
-Move the model zip files to NEURON/reference/models/ (expected names: `general.zip` for V1, `cns-v2.zip` for V2). The models are not part of the container; the pipeline reads them from this folder. To use a different location or file name, change `sturgeon_model` / `sturgeon_v2_model` under `references` in config/samples.yaml.
+Move the model zip files to NEURON/reference/models/ (expected names: `general.zip` for V1, `cns-v2.5.zip` for V2). The models are not part of the container; the pipeline reads them from this folder. To use a different location or file name, change `sturgeon_model` / `sturgeon_v2_model` under `references` in config/samples.yaml.
 
 ### Test the pipeline
 A small testset has been added to the input folder to test correct installation of the workflow. It does not yield biologically meaningful outcomes, but is only to be used to test the workflow.
-
-## Important notes
-At the time of writing (26-06-2026) Sturgeon V2 is yet to be published. So V2 functionality is not available in this repo. One published, the singularity container definitions file will be updated to include automated installation. The pipeline currently uses a pre-built container that includes a local copy of the V2 classifier software; the V2 model file itself (`cns-v2.zip`) is still read from reference/models/.
 
 ## 💭 Feedback and Contributing
 

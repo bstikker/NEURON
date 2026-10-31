@@ -1,4 +1,4 @@
-container: "singularity/cns_AUMC_pipeline_v2.2.sif" # Specify container path relative to container
+container: "singularity/cns_AUMC_pipeline_v2.3.sif" # Specify container path relative to container
 
 #Configure default resources
 threads:
@@ -10,7 +10,7 @@ threads:
 references:
   sturgeon_probes: "reference/probes/probelocs_chm13.bed"
   sturgeon_model: "reference/models/general.zip"
-  sturgeon_v2_model: "reference/models/cns-v2.zip"
+  sturgeon_v2_model: "reference/models/cns-v2.5.zip"
   qdnaseq_bins: "reference/bins/T2T.500kbp.SR50.rda"
   cnv_gene_bed: "reference/genes/relevant_genes_with_chm13v2_500kb_bin_nrs_fusions_singlebin.bed"
   mgmt_model: "scripts/mgmt_137sites_mean_model.Rdata"

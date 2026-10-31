@@ -8,7 +8,7 @@ Place the required model files in this directory before running the pipeline.
  
 ```text
 general.zip
-cns-v2.zip
+cns-v2.5.zip
 ```
 
 Refer to the project documentation for the required model versions, download locations, and any installation instructions.

@@ -71,7 +71,12 @@ parse_sturgeon_csv <- function(f, sample_id) {
 }
 
 parse_sturgeon_v2_csv <- function(f, sample_id) {
-  df <- tryCatch(read.csv(f, stringsAsFactors = FALSE, check.names = FALSE), error = function(e) NULL)
+  # Tab-separated from the public sturgeon-v2 release, comma-separated from older versions
+  df <- tryCatch({
+    header <- readLines(f, n = 1, warn = FALSE)
+    read.table(f, header = TRUE, sep = if (grepl("\t", header)) "\t" else ",",
+               quote = "\"", comment.char = "", stringsAsFactors = FALSE, check.names = FALSE)
+  }, error = function(e) NULL)
   if (is.null(df) || nrow(df) == 0) return(NULL)
 
   time_min <- infer_time_from_path(f, sample_id)

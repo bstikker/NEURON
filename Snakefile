@@ -7,12 +7,12 @@ import sys
 from datetime import datetime
 
 SAMPLES = list(config["samples"].keys())
-CONTAINER = config.get("container", "singularity/cns_AUMC_pipeline_v2.2.sif")
+CONTAINER = config.get("container", "singularity/cns_AUMC_pipeline_v2.3.sif")
 THREADS = config.get("threads", {})
 REFERENCES = config.get("references", {})
 TIMECONFIG = config.get("timecourse", {})
 STURGEON_MODEL = REFERENCES.get("sturgeon_model", "reference/models/general.zip")
-STURGEON_V2_MODEL = REFERENCES.get("sturgeon_v2_model", "reference/models/cns-v2.zip")
+STURGEON_V2_MODEL = REFERENCES.get("sturgeon_v2_model", "reference/models/cns-v2.5.zip")
 QDNASEQ_BINS = REFERENCES.get("qdnaseq_bins", "reference/bins/T2T.500kbp.SR50.rda")
 TIMECourse_BINS = TIMECONFIG.get("bins", [15, 30, 45, 60, 90, 120, 180, 240, 360, 480])
 TIMECourse_CNV_BINS = TIMECONFIG.get("cnv_bins", TIMECourse_BINS)
@@ -166,11 +166,16 @@ rule sturgeon_v2:
         CONTAINER
     shell:
         """
-        sturgeon-v2 \
+        set -euo pipefail
+        # sturgeon-v2 writes result.txt (tab-separated) into an output directory
+        V2_TMP="$(mktemp -d "results/{wildcards.sample}/sturgeon_v2_XXXXXX")"
+        trap 'rm -rf "$V2_TMP"' EXIT
+        sturgeon-v2 single \
             -i {input.bed} \
             -m {input.model} \
-            -o {output.csv} \
+            -o "$V2_TMP" \
             -f bed
+        cp "$V2_TMP/result.txt" {output.csv}
 
         Rscript {params.rscript} \
             {output.csv} \
@@ -402,11 +407,16 @@ rule sturgeon_v2_timecourse:
         CONTAINER
     shell:
         """
-        sturgeon-v2 \
+        set -euo pipefail
+        # sturgeon-v2 writes result.txt (tab-separated) into an output directory
+        V2_TMP="$(mktemp -d "results/{wildcards.sample}/{wildcards.sample}_{wildcards.timebin}min/sturgeon_v2_XXXXXX")"
+        trap 'rm -rf "$V2_TMP"' EXIT
+        sturgeon-v2 single \
             -i {input.bed} \
             -m {input.model} \
-            -o {output.csv} \
+            -o "$V2_TMP" \
             -f bed
+        cp "$V2_TMP/result.txt" {output.csv}
         """
 
 rule timecourse_rmd:
