@@ -29,33 +29,7 @@ timecourse:
 #Only change sample info below
 ###########################################################
 samples:
-  EMC_1:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/EMC_1.bam"
-    barcode_label: "barcode02"
-  EMC_2:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/EMC_2.bam"
-    barcode_label: "barcode03"
-  EMC_3:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/EMC_3.bam"
-    barcode_label: "barcode05"
-  EMC_4:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/EMC_4.bam"
-    barcode_label: "barcode02"
-  EMC_5:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/EMC_5.bam"
-    barcode_label: "barcode03"
-  EMC_6:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/EMC_6.bam"
-    barcode_label: "barcode03"
-  EMC_7:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/EMC_7.bam"
-    barcode_label: "barcode03"
-  EMC_8:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/EMC_8.bam"
-    barcode_label: "barcode04"
-  EMC_9:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/EMC_9.bam"
-    barcode_label: "barcode04"
-  EMC_10:
-    bam: "/net/beegfs/users/P092309/Sturgeon_AUMC_pipeline_snakemake_v2/input/EMC_10.bam"
-    barcode_label: "barcode02"
+  test_data:
+    bam: "/net/beegfs/groups/mpa-md/bstikker/NEURON/input/test_data/test_sample.bam"
+    sequencing_summary: "/net/beegfs/groups/mpa-md/bstikker/NEURON/input/test_data/sequencing_summary.txt"
+    barcode_label: "test_data"
