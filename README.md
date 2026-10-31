@@ -61,9 +61,13 @@ pip install snakemake-executor-plugin-slurm
 Helios has singularity installed as module (1.4.1-1.el9)
 
 ### Install container from .def file
+Run the build from the repository root (the NEURON/ folder), not from inside singularity/: the definition file copies `singularity/sturgeon.yml` using a path relative to the folder you build from.
 ```bash
-apptainer build --fakeroot cns_AUMC_pipeline_v2.3.sif cns_AUMC_pipeline_v2.3.def
+cd NEURON
+apptainer build --fakeroot singularity/cns_AUMC_pipeline_v2.3.sif singularity/cns_AUMC_pipeline_v2.3.def
 ```
+This writes the container to `singularity/cns_AUMC_pipeline_v2.3.sif`, where config/samples.yaml expects it.
+
 The container installs Sturgeon V2 from https://github.com/deRidderLab/sturgeon-v2, pinned to a fixed commit, so the build needs internet access to GitHub. The previous definition (v2.2, with a local copy of Sturgeon V2) is kept in singularity/ for reference.
 ### Reference genome
 The pipeline does not need a reference FASTA, but input BAM files must be aligned to T2T-CHM13v2.0 (https://s3-us-west-2.amazonaws.com/human-pangenomics/T2T/CHM13/assemblies/analysis_set/chm13v2.0.fa.gz), because the probe locations, QDNAseq bins and gene annotations are all in T2T-CHM13v2.0 coordinates.
